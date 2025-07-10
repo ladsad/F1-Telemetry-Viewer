@@ -135,6 +135,11 @@ export class OpenF1Service {
         return this.request(endpoint)
     }
 
+    // Fetch lap info (current lap, total laps, sector times)
+    async getLapInfo(sessionKey: string) {
+        return this.request(`/lap_info?session_key=${sessionKey}`)
+    }
+
     async getWeather(sessionKey: string) {
         return this.request(`/weather_data?session_key=${sessionKey}`)
     }
@@ -152,6 +157,10 @@ export class OpenF1Service {
         if (round !== undefined) params.push(`round=${round}`)
         if (params.length) endpoint += `?${params.join("&")}`
         return this.request(endpoint)
+    }
+    
+    async getSessionDetails(sessionKey: string) {
+        return this.request(`/sessions/${sessionKey}`)
     }
 
     async getMultipleSessionsTelemetry(sessionKeys: string[]): Promise<Record<string, any[]>> {
@@ -171,8 +180,15 @@ export class OpenF1Service {
     async getCalendar(season: number) {
         return this.request(`/sessions?season=${season}`)
     }
-    
-    async getSessionDetails(sessionKey: string) {
-        return this.request(`/sessions/${sessionKey}`)
+
+    async getTrackLayout(sessionKey: string) {
+        return this.request(`/track_layout?session_key=${sessionKey}`)
+    }
+
+    // Fetch sector timing data for a session (optionally for a driver)
+    async getSectorTimings(sessionKey: string, driverNumber?: number) {
+        let endpoint = `/sector_times?session_key=${sessionKey}`
+        if (driverNumber !== undefined) endpoint += `&driver_number=${driverNumber}`
+        return this.request(endpoint)
     }
 }

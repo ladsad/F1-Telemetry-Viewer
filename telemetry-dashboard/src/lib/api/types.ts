@@ -38,3 +38,43 @@ export interface OpenF1DriverInfo {
   color?: string
   // Add more fields as needed from OpenF1 docs
 }
+
+export interface OpenF1DriverPosition {
+  driver_number: number
+  name: string
+  x: number // normalized 0-1
+  y: number // normalized 0-1
+  color: string
+}
+
+export interface OpenF1TrackLayout {
+  svgPath: string
+  width: number
+  height: number
+}
+
+
+
+// Sector timing and performance for a driver in a session
+export interface OpenF1SectorTiming {
+  driver_number: number
+  sector: number // 1, 2, or 3
+  sector_time: number // seconds
+  performance: "fastest" | "personal_best" | "slow" // for color-coding
+  // Optionally, sector start/end positions (normalized 0-1)
+  start_x?: number
+  start_y?: number
+  end_x?: number
+  end_y?: number
+}
+
+// Lap info for a session
+export interface OpenF1LapInfo {
+  currentLap: number
+  totalLaps: number
+  sectorTimes: {
+    sector: number
+    time: number
+    driver_number: number
+  }[]
+}

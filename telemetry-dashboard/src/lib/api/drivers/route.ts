@@ -21,6 +21,18 @@ export async function GET(req: NextRequest) {
       lapNumber ? Number(lapNumber) : undefined
     )
 
+    // Fetch driver info for all drivers in this session
+    let driverInfoMap: Record<string, OpenF1DriverInfo> = {}
+    try {
+      const driverInfos: OpenF1DriverInfo[] = await openf1.getDriverInfo(sessionKey)
+      driverInfoMap = driverInfos.reduce((acc, info) => {
+        acc[info.driver_number] = info
+        return acc
+      }, {} as Record<string, OpenF1DriverInfo>)
+    } catch {
+      // If driver info fails, just skip extra info
+    }
+
     // Optionally, fetch track/circuit location from session details
     let track: { circuit?: string; country?: string; location?: string } = {}
     try {
@@ -34,8 +46,22 @@ export async function GET(req: NextRequest) {
       // If session details fail, just skip track info
     }
 
+    // Normalize positions and attach driver/team info
+    const normalizedPositions = positions.map((pos: any) => {
+      const info = driverInfoMap[pos.driver_number]
+      return {
+        driver_number: pos.driver_number,
+        normalized_track_position_x: pos.normalized_track_position_x,
+        normalized_track_position_y: pos.normalized_track_position_y,
+        team_name: info?.team_name,
+        driver_name: info?.full_name || info?.broadcast_name,
+        color: info?.team_colour,
+        ...pos,
+      }
+    })
+
     return NextResponse.json({
-      positions,
+      positions: normalizedPositions,
       track,
     })
   } catch (err) {

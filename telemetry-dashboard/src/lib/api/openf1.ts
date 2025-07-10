@@ -154,6 +154,24 @@ export class OpenF1Service {
         return this.request(endpoint)
     }
 
+    async getMultipleSessionsTelemetry(sessionKeys: string[]): Promise<Record<string, any[]>> {
+        const results: Record<string, any[]> = {}
+        await Promise.all(
+            sessionKeys.map(async (key) => {
+                try {
+                    results[key] = await this.getCarTelemetry(key)
+                } catch {
+                    results[key] = []
+                }
+            })
+        )
+        return results
+    }
+    
+    async getCalendar(season: number) {
+        return this.request(`/sessions?season=${season}`)
+    }
+    
     async getSessionDetails(sessionKey: string) {
         return this.request(`/sessions/${sessionKey}`)
     }

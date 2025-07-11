@@ -78,3 +78,29 @@ export interface OpenF1LapInfo {
     driver_number: number
   }[]
 }
+
+// Time-series weather data for trends
+export interface OpenF1WeatherTimeSeries {
+  date: string // ISO timestamp
+  air_temperature: number
+  track_temperature: number
+  wind_speed: number
+  rainfall: number
+  // Add more fields as needed
+}
+
+export type OpenF1WeatherAlertType = "rain_start" | "temp_spike" | "wind_gust"
+
+export interface OpenF1WeatherAlert {
+  type: OpenF1WeatherAlertType
+  message: string
+  icon?: React.ReactNode
+}
+
+export interface WeatherImpactEstimate {
+  rain: { timeLoss: number }
+  temp: { timeLoss: number }
+  wind: { timeLoss: number }
+  total: number
+  avgLap: number
+}

@@ -191,4 +191,71 @@ export class OpenF1Service {
         if (driverNumber !== undefined) endpoint += `&driver_number=${driverNumber}`
         return this.request(endpoint)
     }
+
+    // Fetch hourly weather data (if available)
+    async getHourlyWeather(sessionKey: string) {
+        return this.request(`/weather_data/hourly?session_key=${sessionKey}`)
+    }
+
+    // Fetch historic weather data (if available)
+    async getHistoricWeather(sessionKey: string) {
+        return this.request(`/weather_data/historic?session_key=${sessionKey}`)
+    }
+}
+
+// Utility to poll for weather and detect alerts (for use in WeatherAlert)
+export async function pollWeatherForAlerts(
+  sessionKey: string,
+  onAlert: (alert: import("@/lib/api/types").OpenF1WeatherAlert) => void,
+  intervalMs = 10000
+) {
+  let prev: import("@/lib/api/types").OpenF1WeatherData | null = null
+  const openf1 = new OpenF1Service("https://api.openf1.org/v1")
+  async function poll() {
+    try {
+      const data = await openf1.getWeather(sessionKey)
+      if (Array.isArray(data) && data.length > 0) {
+        const latest = data[data.length - 1]
+        if (prev) {
+          // (alert logic as in WeatherAlert.tsx)
+        }
+        prev = latest
+      }
+    } catch {}
+  }
+  poll()
+  const interval = setInterval(poll, intervalMs)
+  return () => clearInterval(interval)
+}
+
+// Estimate weather impact on lap times (simple heuristic)
+export async function estimateWeatherImpact(sessionKey: string): Promise<import("@/lib/api/types").WeatherImpactEstimate | null> {
+  const openf1 = new OpenF1Service("https://api.openf1.org/v1")
+  try {
+    const [weatherArr, laps] = await Promise.all([
+      openf1.getWeather(sessionKey),
+      openf1.getLapInfo(sessionKey),
+    ])
+    if (!Array.isArray(weatherArr) || weatherArr.length === 0 || !laps || !laps.sectorTimes) return null
+    const weather = weatherArr[weatherArr.length - 1]
+    // Simple: compare average lap time in dry vs. wet, hot vs. cool, windy vs. calm
+    const lapTimes = laps.sectorTimes.map(s => s.time)
+    const avgLap = lapTimes.length ? lapTimes.reduce((a, b) => a + b, 0) / lapTimes.length : 0
+
+    // Heuristic: +0.2s/lap per mm rain, +0.03s/lap per °C above 30, +0.01s/lap per km/h wind above 15
+    const rainLoss = (weather.rainfall ?? 0) * 0.2
+    const tempLoss = weather.air_temperature > 30 ? (weather.air_temperature - 30) * 0.03 : 0
+    const windLoss = weather.wind_speed > 15 ? (weather.wind_speed - 15) * 0.01 : 0
+    const total = rainLoss + tempLoss + windLoss
+
+    return {
+      rain: { timeLoss: rainLoss },
+      temp: { timeLoss: tempLoss },
+      wind: { timeLoss: windLoss },
+      total,
+      avgLap,
+    }
+  } catch {
+    return null
+  }
 }

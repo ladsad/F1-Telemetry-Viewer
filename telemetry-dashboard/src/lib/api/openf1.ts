@@ -201,6 +201,38 @@ export class OpenF1Service {
     async getHistoricWeather(sessionKey: string) {
         return this.request(`/weather_data/historic?session_key=${sessionKey}`)
     }
+
+    // Fetch real-time driver status (tire, ERS, pit, etc.)
+    async getDriverStatus(
+        sessionKey: string,
+        driverNumber: number
+    ) {
+        return this.request(`/driver_status?session_key=${sessionKey}&driver_number=${driverNumber}`)
+    }
+
+    // Fetch lap times for a driver in a session
+    async getLapTimes(
+        sessionKey: string,
+        driverNumber: number
+    ) {
+        return this.request(`/lap_times?session_key=${sessionKey}&driver_number=${driverNumber}`)
+    }
+
+    // Fetch tire stints for a driver in a session
+    async getTireStints(
+        sessionKey: string,
+        driverNumber: number
+    ) {
+        return this.request(`/tire_stints?session_key=${sessionKey}&driver_number=${driverNumber}`)
+    }
+
+    // Fetch radio messages for a driver in a session
+    async getRadioMessages(
+        sessionKey: string,
+        driverNumber: number
+    ) {
+        return this.request(`/radio_messages?session_key=${sessionKey}&driver_number=${driverNumber}`)
+    }
 }
 
 // Utility to poll for weather and detect alerts (for use in WeatherAlert)

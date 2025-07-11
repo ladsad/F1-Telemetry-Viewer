@@ -79,6 +79,14 @@ export interface OpenF1LapInfo {
   }[]
 }
 
+// Lap time for a driver in a session
+export interface OpenF1LapTime {
+  driver_number: number
+  lap_number: number
+  lap_time: number // seconds
+  // Add more fields as needed
+}
+
 // Time-series weather data for trends
 export interface OpenF1WeatherTimeSeries {
   date: string // ISO timestamp
@@ -103,4 +111,32 @@ export interface WeatherImpactEstimate {
   wind: { timeLoss: number }
   total: number
   avgLap: number
+}
+
+export interface OpenF1DriverStatus {
+  driver_number: number
+  driver_name: string
+  tire_compound: "Soft" | "Medium" | "Hard" | "Inter" | "Wet"
+  tire_age: number
+  ers: number // 0-100
+  pit_status: "None" | "Pitting" | "Out Lap" | "In Lap"
+  last_pit?: number // lap number of last pit stop
+  // Add more fields as needed
+}
+
+// Tire stint for a driver in a session
+export interface OpenF1TireStint {
+  driver_number: number
+  start_lap: number
+  end_lap: number
+  compound: "Soft" | "Medium" | "Hard" | "Inter" | "Wet"
+}
+
+// Radio message for a driver in a session
+export interface OpenF1RadioMessage {
+  driver_number: number
+  session_key: string
+  timestamp: string // ISO timestamp
+  message: string
+  source: "driver" | "engineer"
 }

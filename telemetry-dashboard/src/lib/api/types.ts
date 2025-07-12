@@ -87,6 +87,18 @@ export interface OpenF1LapTime {
   // Add more fields as needed
 }
 
+// Driver info for comparison
+export interface OpenF1DriverInfo {
+  driver_number: number
+  broadcast_name: string
+  full_name: string
+  team_name: string
+  country_code: string
+  headshot_url?: string
+  color?: string
+  // Add more fields as needed from OpenF1 docs
+}
+
 // Time-series weather data for trends
 export interface OpenF1WeatherTimeSeries {
   date: string // ISO timestamp
@@ -139,4 +151,33 @@ export interface OpenF1RadioMessage {
   timestamp: string // ISO timestamp
   message: string
   source: "driver" | "engineer"
+}
+
+// Session event (for timeline/scrub bar)
+export interface OpenF1SessionEvent {
+  type: "pit" | "safetycar" | "crash" | "vsc" | string
+  lap_number: number
+  description?: string
+  timestamp?: string
+  driver_number?: number
+}
+
+// Delta time between drivers per lap
+export interface OpenF1DeltaTime {
+  lap_number: number
+  driver_number: number
+  reference_driver_number: number
+  delta: number // seconds (positive = behind reference)
+}
+
+export type AnalyticsMetric = {
+  key: string
+  label: string
+}
+
+export type AnalyticsFilter = {
+  drivers: number[]
+  referenceDriver?: number
+  metric: string
+  // Add more filter fields as needed (lap range, stint, weather, etc.)
 }

@@ -5,6 +5,7 @@ import HistoricSessionSelector from "@/components/HistoricSessionSelector"
 import TimelineScrubber from "@/components/TimelineScrubber"
 import PlaybackControls from "@/components/PlaybackControls"
 import SessionComparison from "@/components/SessionComparison"
+import RaceProgressScrubBar from "@/components/RaceProgressScrubBar"
 import { useHistoricTelemetry } from "@/lib/hooks/useHistoricTelemetry"
 import { useHistoricPlayback } from "@/lib/hooks/useHistoricPlayback"
 
@@ -42,6 +43,9 @@ export default function HistoricViewPage() {
     setPlaybackIdx(idx)
   }
 
+  // Add state for lap scrubber
+  const [scrubLap, setScrubLap] = useState(1)
+
   return (
     <div>
       <h1 className="text-2xl font-bold mb-4">Historic Telemetry View</h1>
@@ -59,6 +63,12 @@ export default function HistoricViewPage() {
             {selectedSession.date_start?.slice(0, 10)}
           </div>
           <div className="mt-6 flex flex-col gap-4">
+            {/* Race progress scrub bar with event markers */}
+            <RaceProgressScrubBar
+              sessionKey={sessionKey}
+              value={scrubLap}
+              onChange={setScrubLap}
+            />
             <PlaybackControls
               playing={playing}
               onPlayPause={toggle}

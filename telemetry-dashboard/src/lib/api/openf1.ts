@@ -233,6 +233,62 @@ export class OpenF1Service {
     ) {
         return this.request(`/radio_messages?session_key=${sessionKey}&driver_number=${driverNumber}`)
     }
+
+    // Fetch driver info for a session (optionally for a specific driver)
+    async getDriverInfo(
+        sessionKey: string,
+        driverNumber?: number
+    ) {
+        let endpoint = `/drivers?session_key=${sessionKey}`
+        if (driverNumber !== undefined) endpoint += `&driver_number=${driverNumber}`
+        return this.request(endpoint)
+    }
+
+    // Fetch session events (pit stops, safety cars, crashes, etc.)
+    async getSessionEvents(
+        sessionKey: string
+    ) {
+        return this.request(`/session_events?session_key=${sessionKey}`)
+    }
+
+    // Fetch delta times for a session (optional: for specific drivers)
+    async getDeltaTimes(
+        sessionKey: string,
+        driverNumbers?: number[],
+        referenceDriver?: number
+    ) {
+        let endpoint = `/delta_times?session_key=${sessionKey}`
+        if (driverNumbers && driverNumbers.length)
+            endpoint += `&driver_numbers=${driverNumbers.join(",")}`
+        if (referenceDriver !== undefined)
+            endpoint += `&reference_driver=${referenceDriver}`
+        return this.request(endpoint)
+    }
+
+    // Fetch lap times, delta, or events with filters for analytics dashboard
+    async getAnalyticsData(
+        sessionKey: string,
+        filters: import("@/lib/api/types").AnalyticsFilter
+    ) {
+        // Example: fetch lap times for selected drivers
+        if (filters.metric === "lapTime") {
+            return Promise.all(
+                filters.drivers.map(driverNumber =>
+                    this.getLapTimes(sessionKey, driverNumber)
+                )
+            )
+        }
+        // Example: fetch delta times
+        if (filters.metric === "deltaTime") {
+            return this.getDeltaTimes(sessionKey, filters.drivers, filters.referenceDriver)
+        }
+        // Example: fetch session events for race progress
+        if (filters.metric === "raceProgress") {
+            return this.getSessionEvents(sessionKey)
+        }
+        // Add more as needed
+        return null
+    }
 }
 
 // Utility to poll for weather and detect alerts (for use in WeatherAlert)
@@ -271,8 +327,8 @@ export async function estimateWeatherImpact(sessionKey: string): Promise<import(
     if (!Array.isArray(weatherArr) || weatherArr.length === 0 || !laps || !laps.sectorTimes) return null
     const weather = weatherArr[weatherArr.length - 1]
     // Simple: compare average lap time in dry vs. wet, hot vs. cool, windy vs. calm
-    const lapTimes = laps.sectorTimes.map(s => s.time)
-    const avgLap = lapTimes.length ? lapTimes.reduce((a, b) => a + b, 0) / lapTimes.length : 0
+    const lapTimes = laps.sectorTimes.map((s: { time: number }) => s.time)
+    const avgLap = lapTimes.length ? lapTimes.reduce((a: number, b: number) => a + b, 0) / lapTimes.length : 0
 
     // Heuristic: +0.2s/lap per mm rain, +0.03s/lap per °C above 30, +0.01s/lap per km/h wind above 15
     const rainLoss = (weather.rainfall ?? 0) * 0.2

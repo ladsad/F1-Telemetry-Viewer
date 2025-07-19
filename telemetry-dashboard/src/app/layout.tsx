@@ -12,7 +12,9 @@ export default function RootLayout({ children }: { children: ReactNode }) {
           <div className="fixed top-4 right-4 z-50">
             <ThemeToggle />
           </div>
-          {children}
+          <div className="flex flex-col min-h-screen md:flex-row">
+            {children}
+          </div>
         </ThemeProvider>
       </body>
     </html>

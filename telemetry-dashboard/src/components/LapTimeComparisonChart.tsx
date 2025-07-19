@@ -1,12 +1,13 @@
 "use client"
 
-import { useEffect, useState } from "react"
+import { useEffect, useState, useRef } from "react"
 import { Card, CardHeader, CardTitle, CardContent } from "@/components/ui/card"
 import { OpenF1Service } from "@/lib/api/openf1"
 import type { OpenF1LapTime, OpenF1DriverInfo } from "@/lib/api/types"
-import { LineChart, Line, XAxis, YAxis, Tooltip, Legend, ResponsiveContainer } from "recharts"
+import { LineChart, Line, XAxis, YAxis, Tooltip, Legend, ResponsiveContainer, ReferenceLine } from "recharts"
 import { useTheme } from "@/components/ThemeProvider"
-import { Clock } from "lucide-react"
+import { Clock, ArrowUpDown, Download } from "lucide-react"
+import AnimatedButton from "@/components/AnimatedButton"
 
 type LapTimeComparisonChartProps = {
   sessionKey: string
@@ -27,7 +28,10 @@ export default function LapTimeComparisonChart({
   const [series, setSeries] = useState<Series[]>([])
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
-
+  const [activeDrivers, setActiveDrivers] = useState<number[]>([...driverNumbers])
+  const [touchPoints, setTouchPoints] = useState<{x: number, y: number}[]>([])
+  const chartRef = useRef<HTMLDivElement>(null)
+  
   useEffect(() => {
     if (!sessionKey || !driverNumbers.length) return
     setLoading(true)
@@ -60,6 +64,34 @@ export default function LapTimeComparisonChart({
       .finally(() => setLoading(false))
   }, [sessionKey, driverNumbers])
 
+  // Touch-friendly driver toggle
+  const toggleDriver = (driverNumber: number) => {
+    if (activeDrivers.includes(driverNumber)) {
+      setActiveDrivers(activeDrivers.filter(d => d !== driverNumber))
+    } else {
+      setActiveDrivers([...activeDrivers, driverNumber])
+    }
+  }
+  
+  // Handle touch interactions with chart
+  const handleChartTouch = (e: React.TouchEvent) => {
+    if (!chartRef.current || e.touches.length === 0) return
+    
+    const rect = chartRef.current.getBoundingClientRect()
+    const touchX = e.touches[0].clientX - rect.left
+    const touchY = e.touches[0].clientY - rect.top
+    
+    // Add touch indicator for feedback
+    setTouchPoints([...touchPoints, {x: touchX, y: touchY}])
+    setTimeout(() => setTouchPoints(prev => prev.slice(1)), 1000)
+  }
+  
+  // Export chart data to CSV
+  const exportToCSV = () => {
+    // Implementation for exporting data
+    console.log("Exporting chart data")
+  }
+
   // Build chart data: one object per lap, with each driver's time as a key
   const chartData: Record<string, any>[] = []
   if (series.length) {
@@ -75,45 +107,136 @@ export default function LapTimeComparisonChart({
   }
 
   return (
-    <Card className="mt-4">
-      <CardHeader>
-        <CardTitle className="flex items-center gap-2">
-          <Clock className="w-5 h-5" />
-          Lap Time Comparison
-        </CardTitle>
+    <Card 
+      className="mt-4 w-full card-transition card-hover" 
+      style={{ borderColor: colors.primary, background: colors.primary + "10" }}
+    >
+      <CardHeader className="p-responsive-md">
+        <div className="flex flex-wrap items-center justify-between gap-responsive-sm">
+          <CardTitle className="flex items-center gap-2 text-responsive-lg">
+            <Clock className="w-6 h-6" />
+            <span>Lap Time Comparison</span>
+          </CardTitle>
+          
+          <div className="flex items-center gap-2">
+            <AnimatedButton
+              variant="ghost"
+              size="sm"
+              onClick={() => setActiveDrivers(driverNumbers)}
+              aria-label="Toggle all drivers"
+              className="tap-target"
+            >
+              <ArrowUpDown className="w-5 h-5 mr-1" />
+              <span className="text-responsive-sm">All</span>
+            </AnimatedButton>
+            
+            <AnimatedButton
+              variant="ghost"
+              size="sm"
+              onClick={exportToCSV}
+              aria-label="Export data"
+              className="tap-target"
+            >
+              <Download className="w-5 h-5 mr-1" />
+              <span className="text-responsive-sm">Export</span>
+            </AnimatedButton>
+          </div>
+        </div>
+        
+        {/* Driver selection pills - touch friendly */}
+        <div className="flex flex-wrap gap-2 mt-2">
+          {series.map((s) => (
+            <button
+              key={s.name}
+              className={`px-3 py-2 rounded-full text-responsive-xs font-formula1 tap-target transition-all ${
+                activeDrivers.includes(s.driverNumber)
+                  ? 'bg-opacity-100 text-white'
+                  : 'bg-opacity-30 text-foreground'
+              }`}
+              style={{ 
+                backgroundColor: activeDrivers.includes(s.driverNumber) 
+                  ? s.color 
+                  : s.color + '30'
+              }}
+              onClick={() => toggleDriver(s.driverNumber)}
+            >
+              #{s.driverNumber}
+            </button>
+          ))}
+        </div>
       </CardHeader>
-      <CardContent>
-        {loading && <div className="text-xs text-muted-foreground font-formula1">Loading lap times...</div>}
-        {error && <div className="text-xs text-destructive font-formula1">{error}</div>}
+      <CardContent className="p-responsive-md">
+        {loading && <div className="text-responsive-sm text-muted-foreground">Loading lap times...</div>}
+        {error && <div className="text-responsive-sm text-destructive">{error}</div>}
         {!loading && !error && (
-          <ResponsiveContainer width="100%" height={300}>
-            <LineChart data={chartData}>
-              <XAxis 
-                dataKey="lap" 
-                label={{ value: "LAP", position: "insideBottomRight", offset: -5 }}
-                tick={{ fontFamily: "Formula1" }}
+          <div 
+            className="w-full h-[300px] md:h-[400px] relative touch-manipulation"
+            ref={chartRef}
+            onTouchStart={handleChartTouch}
+            onTouchMove={handleChartTouch}
+          >
+            {/* Touch feedback indicators */}
+            {touchPoints.map((point, i) => (
+              <motion.div
+                key={i}
+                className="absolute w-8 h-8 rounded-full bg-primary opacity-30"
+                style={{ left: point.x - 16, top: point.y - 16 }}
+                initial={{ scale: 0 }}
+                animate={{ scale: 1.5, opacity: 0 }}
+                transition={{ duration: 0.7 }}
               />
-              <YAxis
-                label={{ value: "LAP TIME (s)", angle: -90, position: "insideLeft", fontFamily: "Formula1" }}
-                domain={["auto", "auto"]}
-                allowDecimals={true}
-                tick={{ fontFamily: "Formula1" }}
-              />
-              <Tooltip contentStyle={{ fontFamily: "Formula1" }} />
-              <Legend wrapperStyle={{ fontFamily: "Formula1", textTransform: "uppercase" }} />
-              {series.map((s) => (
-                <Line
-                  key={s.name}
-                  type="monotone"
-                  dataKey={s.name}
-                  stroke={s.color}
-                  dot={false}
-                  strokeWidth={2}
-                  isAnimationActive={false}
+            ))}
+            
+            <ResponsiveContainer width="100%" height="100%">
+              <LineChart 
+                data={chartData}
+                margin={{ top: 10, right: 10, bottom: 20, left: 10 }}
+              >
+                <XAxis 
+                  dataKey="lap" 
+                  label={{ value: "LAP", position: "insideBottomRight", offset: -5 }}
+                  tick={{ fontFamily: "Formula1", fontSize: 12 }}
+                  tickMargin={8}
                 />
-              ))}
-            </LineChart>
-          </ResponsiveContainer>
+                <YAxis
+                  label={{ value: "LAP TIME (s)", angle: -90, position: "insideLeft", fontFamily: "Formula1", fontSize: 12 }}
+                  domain={["auto", "auto"]}
+                  allowDecimals={true}
+                  tick={{ fontFamily: "Formula1", fontSize: 12 }}
+                  tickMargin={8}
+                />
+                <Tooltip 
+                  contentStyle={{ 
+                    fontFamily: "Formula1", 
+                    fontSize: '16px',
+                    borderRadius: '8px',
+                    padding: '12px'
+                  }} 
+                  wrapperStyle={{ outline: 'none' }}
+                />
+                <Legend 
+                  wrapperStyle={{ fontFamily: "Formula1", textTransform: "uppercase", fontSize: 14 }} 
+                  verticalAlign="bottom"
+                  height={40}
+                  onClick={(e) => toggleDriver(e.dataKey)} // Make legend items clickable
+                />
+                {series
+                  .filter(s => activeDrivers.includes(s.driverNumber))
+                  .map((s) => (
+                    <Line
+                      key={s.name}
+                      type="monotone"
+                      dataKey={s.name}
+                      stroke={s.color}
+                      strokeWidth={3}
+                      dot={{ r: 6, strokeWidth: 2 }}
+                      activeDot={{ r: 8, strokeWidth: 0 }}
+                      isAnimationActive={false}
+                    />
+                  ))}
+              </LineChart>
+            </ResponsiveContainer>
+          </div>
         )}
       </CardContent>
     </Card>

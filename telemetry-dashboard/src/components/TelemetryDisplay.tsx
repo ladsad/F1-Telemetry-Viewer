@@ -1,11 +1,12 @@
 "use client"
 
-import { useEffect, useRef, useState } from "react"
+import { useEffect, useRef, useState, useCallback } from "react"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Gauge, Zap, Activity, Settings, TrendingUp, RefreshCw } from "lucide-react"
 import { motion, AnimatePresence } from "framer-motion"
 import { useTheme } from "@/components/ThemeProvider"
 import { SpeedometerIcon, ERSIcon } from "@/components/Icons"
+import AnimatedButton from "@/components/AnimatedButton"
 
 type TelemetryData = {
   speed: number
@@ -41,15 +42,11 @@ function loadTelemetryFromCache(): TelemetryData | null {
   }
 }
 
-export default function TelemetryDisplay({
-  sessionKey,
-  wsUrl,
-  fallbackApiUrl,
-  refreshIntervalMs = 1000,
-}: TelemetryDisplayProps) {
+export default function TelemetryDisplay(props: TelemetryDisplayProps) {
   const { colors } = useTheme()
   const [data, setData] = useState<TelemetryData | null>(null)
-  const [intervalMs, setIntervalMs] = useState(refreshIntervalMs)
+  const [intervalMs, setIntervalMs] = useState(props.refreshIntervalMs)
+  const [isRefreshing, setIsRefreshing] = useState(false)
   const wsRef = useRef<WebSocket | null>(null)
 
   // Load cached telemetry on mount
@@ -60,9 +57,9 @@ export default function TelemetryDisplay({
 
   // WebSocket connection for real-time telemetry
   useEffect(() => {
-    if (!wsUrl || !sessionKey) return
+    if (!props.wsUrl || !props.sessionKey) return
 
-    const ws = new WebSocket(`${wsUrl}?session_key=${sessionKey}`)
+    const ws = new WebSocket(`${props.wsUrl}?session_key=${props.sessionKey}`)
     wsRef.current = ws
 
     ws.onmessage = (event) => {
@@ -94,19 +91,19 @@ export default function TelemetryDisplay({
     return () => {
       ws.close()
     }
-  }, [wsUrl, sessionKey])
+  }, [props.wsUrl, props.sessionKey])
 
   // Fallback: Poll REST API if no WebSocket or on error
   useEffect(() => {
-    if (data || wsUrl) return // Prefer WebSocket if available
-    if (!fallbackApiUrl) return
+    if (data || props.wsUrl) return // Prefer WebSocket if available
+    if (!props.fallbackApiUrl) return
 
     let mounted = true
     let interval: NodeJS.Timeout
 
     const poll = async () => {
       try {
-        const res = await fetch(fallbackApiUrl)
+        const res = await fetch(props.fallbackApiUrl)
         if (!res.ok) return
         const latest = await res.json()
         const newData: TelemetryData = latest[0] || latest
@@ -124,7 +121,7 @@ export default function TelemetryDisplay({
       mounted = false
       clearInterval(interval)
     }
-  }, [fallbackApiUrl, wsUrl, data, intervalMs])
+  }, [props.fallbackApiUrl, props.wsUrl, data, intervalMs])
 
   const display = data || {
     speed: 0,
@@ -135,7 +132,14 @@ export default function TelemetryDisplay({
     rpm: 0,
   }
 
-  const showRefreshControl = !wsUrl && !!fallbackApiUrl
+  const showRefreshControl = !props.wsUrl && !!props.fallbackApiUrl
+
+  // Touch-friendly refresh handler
+  const handleRefresh = useCallback(() => {
+    setIsRefreshing(true)
+    // Implement refresh logic here
+    setTimeout(() => setIsRefreshing(false), 1000)
+  }, [])
 
   return (
     <motion.div
@@ -143,78 +147,82 @@ export default function TelemetryDisplay({
       animate={{ opacity: 1, y: 0 }}
       transition={{ duration: 0.5 }}
     >
-      <Card
-        className="w-full max-w-xl mx-auto card-transition card-hover"
+      <Card 
+        className="w-full card-transition card-hover fade-in" 
         style={{ borderColor: colors.primary, background: colors.primary + "10" }}
       >
-        <CardHeader>
-          <CardTitle className="flex items-center gap-2">
-            <motion.div whileHover={{ rotate: 20 }} transition={{ type: "spring", stiffness: 300 }}>
-              <SpeedometerIcon className="w-5 h-5" />
-            </motion.div>
-            Live Telemetry
-            {showRefreshControl && (
-              <span className="flex items-center gap-1 ml-2 text-xs text-muted-foreground font-formula1">
-                <RefreshCw className="w-4 h-4 animate-spin" />
-                {intervalMs}ms
-              </span>
-            )}
-          </CardTitle>
-        </CardHeader>
-        <CardContent className="grid grid-cols-3 gap-6">
-          <AnimatePresence>
-            {Object.entries(display).map(([key, value]) => (
-              <motion.div
-                key={key}
-                initial={{ opacity: 0 }}
-                animate={{ opacity: 1 }}
-                exit={{ opacity: 0 }}
-                transition={{ duration: 0.3 }}
+        <CardHeader className="p-responsive-md">
+          <div className="flex flex-wrap items-center justify-between gap-responsive-sm">
+            <CardTitle className="flex items-center gap-2 text-responsive-lg">
+              <motion.div 
+                whileHover={{ rotate: 20 }} 
+                whileTap={{ scale: 0.9, rotate: 40 }}
+                transition={{ type: "spring", stiffness: 300 }}
               >
-                {/* Your metrics display components */}
+                <SpeedometerIcon className="w-6 h-6" />
               </motion.div>
-            ))}
-          </AnimatePresence>
-          
-          <MetricDisplay
-            icon={<SpeedometerIcon color={colors.primary} />}
-            value={`${display.speed}`}
-            unit="km/h"
-            label="Speed"
-            prevValue={prevData?.speed}
-          />
-          <MetricDisplay
-            icon={<Zap className="mb-1" color={colors.primary} />}
-            value={`${display.throttle}`}
-            unit="%"
-            label="Throttle"
-          />
-          <MetricDisplay
-            icon={<Activity className="mb-1" />}
-            value={`${display.brake}`}
-            unit="%"
-            label="Brake"
-          />
-          <MetricDisplay
-            icon={<Settings className="mb-1" />}
-            value={`${display.gear}`}
-            unit=""
-            label="Gear"
-          />
-          <MetricDisplay
-            icon={<TrendingUp className="mb-1" />}
-            value={`${display.rpm}`}
-            unit="RPM"
-            label="RPM"
-          />
-          <div className="flex flex-col items-center">
-            <div className={`mb-1 ${display.drs ? "text-green-500" : "text-gray-400"}`}>
-              <ERSIcon />
+              <span>Live Telemetry</span>
+            </CardTitle>
+            
+            <AnimatedButton 
+              variant="ghost" 
+              size="sm" 
+              className="tap-target"
+              onClick={handleRefresh} 
+              disabled={isRefreshing}
+              aria-label="Refresh telemetry data"
+            >
+              <RefreshCw className={`w-5 h-5 ${isRefreshing ? 'animate-spin' : ''}`} />
+              <span className="ml-1 text-responsive-sm">Refresh</span>
+            </AnimatedButton>
+          </div>
+        </CardHeader>
+        
+        <CardContent className="p-responsive-md">
+          <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-6 gap-responsive-md">
+            <MetricDisplay
+              icon={<SpeedometerIcon color={colors.primary} className="w-7 h-7" />}
+              value={`${display.speed}`}
+              unit="km/h"
+              label="Speed"
+              prevValue={prevData?.speed}
+            />
+            <MetricDisplay
+              icon={<Zap className="mb-1 w-6 h-6" color={colors.primary} />}
+              value={`${display.throttle}`}
+              unit="%"
+              label="Throttle"
+            />
+            <MetricDisplay
+              icon={<Activity className="mb-1 w-6 h-6" />}
+              value={`${display.brake}`}
+              unit="%"
+              label="Brake"
+            />
+            <MetricDisplay
+              icon={<Settings className="mb-1 w-6 h-6" />}
+              value={`${display.gear}`}
+              unit=""
+              label="Gear"
+            />
+            <MetricDisplay
+              icon={<TrendingUp className="mb-1 w-6 h-6" />}
+              value={`${display.rpm}`}
+              unit="RPM"
+              label="RPM"
+            />
+            <div className="flex flex-col items-center justify-center tap-target p-responsive-sm">
+              <div 
+                className={`mb-1 ${display.drs ? "text-green-500" : "text-gray-400"}`}
+                style={{ minHeight: '24px' }}
+              >
+                <ERSIcon className="w-6 h-6" />
+              </div>
+              <div className="metric-value">
+                {display.drs ? "ON" : "OFF"}
+              </div>
+              <div className="metric-label">DRS</div>
             </div>
-            <div className="metric-value">
-              {display.drs ? "ON" : "OFF"}
-            </div>
-            <div className="metric-label">DRS</div>
           </div>
         </CardContent>
       </Card>
@@ -223,19 +231,18 @@ export default function TelemetryDisplay({
 }
 
 function MetricDisplay({ icon, value, unit, label, prevValue }) {
-  // Add animation when values change
   const hasChanged = prevValue !== undefined && prevValue !== value;
   
   return (
-    <div className="flex flex-col items-center">
-      <div className="mb-1">{icon}</div>
+    <div className="flex flex-col items-center justify-center tap-target p-responsive-sm">
+      <div className="mb-1" style={{ minHeight: '24px' }}>{icon}</div>
       <motion.div 
         className="metric-value"
         animate={hasChanged ? { scale: [1, 1.1, 1] } : {}}
         transition={{ duration: 0.3 }}
       >
         {value}
-        <span className="text-sm ml-1">{unit}</span>
+        <span className="ml-1 text-responsive-xs">{unit}</span>
       </motion.div>
       <div className="metric-label">{label}</div>
     </div>

@@ -35,15 +35,14 @@ export default function PerformanceAnalyticsDashboard({
   const [selectedMetric, setSelectedMetric] = useState<string>(initialMetric)
   const [lap, setLap] = useState(1)
 
-  // Example filter UI (expand as needed)
   return (
-    <div>
-      <div className="flex flex-wrap gap-4 mb-6 items-end">
-        <div>
+    <div className="p-2 sm:p-4">
+      <div className="flex flex-col md:flex-row flex-wrap gap-4 mb-6 items-start md:items-end">
+        <div className="w-full md:w-auto">
           <label className="block text-sm font-formula1 font-medium mb-1 uppercase tracking-wider">Drivers</label>
           <select
             multiple
-            className="rounded px-2 py-1 text-sm border min-w-[120px] font-formula1"
+            className="rounded px-2 py-1 text-sm border w-full md:min-w-[120px] font-formula1"
             value={selectedDrivers.map(String)}
             onChange={e =>
               setSelectedDrivers(
@@ -58,10 +57,10 @@ export default function PerformanceAnalyticsDashboard({
             ))}
           </select>
         </div>
-        <div>
+        <div className="w-full md:w-auto">
           <label className="block text-sm font-formula1 font-medium mb-1 uppercase tracking-wider">Reference Driver</label>
           <select
-            className="rounded px-2 py-1 text-sm border font-formula1"
+            className="rounded px-2 py-1 text-sm border w-full font-formula1"
             value={referenceDriver}
             onChange={e => setReferenceDriver(Number(e.target.value))}
           >
@@ -72,10 +71,10 @@ export default function PerformanceAnalyticsDashboard({
             ))}
           </select>
         </div>
-        <div>
+        <div className="w-full md:w-auto">
           <label className="block text-sm font-formula1 font-medium mb-1 uppercase tracking-wider">Metric</label>
           <select
-            className="rounded px-2 py-1 text-sm border font-formula1"
+            className="rounded px-2 py-1 text-sm border w-full font-formula1"
             value={selectedMetric}
             onChange={e => setSelectedMetric(e.target.value)}
           >
@@ -87,8 +86,9 @@ export default function PerformanceAnalyticsDashboard({
           </select>
         </div>
       </div>
+      
       {/* Analytics tools composition */}
-      <div>
+      <div className="space-y-6">
         {(selectedMetric === "lapTime" || selectedMetric === "all") && (
           <LapTimeComparisonChart
             sessionKey={sessionKey}

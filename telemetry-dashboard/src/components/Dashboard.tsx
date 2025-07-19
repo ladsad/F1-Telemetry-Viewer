@@ -1,59 +1,69 @@
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
+import TelemetryDisplay from "@/components/TelemetryDisplay"
+import TrackMap from "@/components/TrackMap"
+import { DriverPanel } from "@/components/DriverPanel"
+import LapTimeComparisonChart from "@/components/LapTimeComparisonChart"
+import RaceProgressScrubBar from "@/components/RaceProgressScrubBar"
+import { WeatherOverlay } from "@/components/WeatherOverlay"
+import { useTheme } from "@/components/ThemeProvider"
 
-export default function Dashboard() {
+type DashboardProps = {
+  sessionKey: string
+  driverNumber: number
+  driverNumbers: number[]
+}
+
+export default function Dashboard({ sessionKey, driverNumber, driverNumbers }: DashboardProps) {
+  const { colors } = useTheme()
+  
   return (
-    <div className="grid grid-cols-1 gap-6 md:grid-cols-3 lg:grid-cols-4 p-6">
-      {/* Live Telemetry */}
-      <Card className="md:col-span-2 lg:col-span-2 row-span-2">
-        <CardHeader>
-          <CardTitle>Live Telemetry</CardTitle>
-        </CardHeader>
-        <CardContent>
-          {/* Telemetry data visualization goes here */}
-          <div className="h-48 flex items-center justify-center text-muted-foreground">
-            Live telemetry data
-          </div>
-        </CardContent>
-      </Card>
+    <div className="grid grid-cols-1 gap-3 sm:gap-4 md:gap-6">
+      {/* Live Telemetry - Full width on all screens */}
+      <div className="col-span-1">
+        <TelemetryDisplay 
+          sessionKey={sessionKey} 
+          wsUrl="wss://api.example.com/telemetry"
+          fallbackApiUrl="/api/telemetry/latest"
+        />
+      </div>
 
-      {/* Track Map with Weather Overlay */}
-      <Card className="md:col-span-1 lg:col-span-1 row-span-2">
-        <CardHeader>
-          <CardTitle>Track Map & Weather</CardTitle>
-        </CardHeader>
-        <CardContent>
-          {/* Track map and weather overlay visualization goes here */}
-          <div className="h-48 flex items-center justify-center text-muted-foreground">
-            Track map & weather overlay
-          </div>
-        </CardContent>
-      </Card>
+      {/* Two-panel row that stacks on mobile, side-by-side on larger screens */}
+      <div className="grid grid-cols-1 md:grid-cols-2 gap-3 sm:gap-4 md:gap-6 col-span-1">
+        <TrackMap sessionKey={sessionKey} />
+        <WeatherOverlay weather={null} />
+      </div>
 
-      {/* Driver Panel */}
-      <Card className="md:col-span-1 lg:col-span-1">
-        <CardHeader>
-          <CardTitle>Driver Panel</CardTitle>
-        </CardHeader>
-        <CardContent>
-          {/* Driver info and metrics go here */}
-          <div className="h-24 flex items-center justify-center text-muted-foreground">
-            Driver metrics
-          </div>
-        </CardContent>
-      </Card>
+      {/* Driver panel and tools that stack on mobile, side-by-side on larger screens */}
+      <div className="grid grid-cols-1 md:grid-cols-2 gap-3 sm:gap-4 md:gap-6 col-span-1">
+        {/* Driver panel */}
+        <div className="col-span-1">
+          <DriverPanel sessionKey={sessionKey} driverNumber={driverNumber} />
+        </div>
 
-      {/* Interactive Tools */}
-      <Card className="md:col-span-3 lg:col-span-4">
-        <CardHeader>
-          <CardTitle>Interactive Tools</CardTitle>
-        </CardHeader>
-        <CardContent>
-          {/* Lap comparison, scrub bar, etc. */}
-          <div className="h-24 flex items-center justify-center text-muted-foreground">
-            Interactive tools (lap comparison, scrub bar)
-          </div>
-        </CardContent>
-      </Card>
+        {/* Interactive tools */}
+        <div className="col-span-1">
+          <Card style={{ borderColor: colors.primary, background: colors.primary + "10" }}>
+            <CardHeader>
+              <CardTitle>Interactive Tools</CardTitle>
+            </CardHeader>
+            <CardContent>
+              <RaceProgressScrubBar 
+                sessionKey={sessionKey} 
+                value={1} 
+                onChange={(lap) => console.log(`Lap changed: ${lap}`)} 
+              />
+            </CardContent>
+          </Card>
+        </div>
+      </div>
+
+      {/* Full width comparison chart */}
+      <div className="col-span-1">
+        <LapTimeComparisonChart 
+          sessionKey={sessionKey} 
+          driverNumbers={driverNumbers} 
+        />
+      </div>
     </div>
   )
 }

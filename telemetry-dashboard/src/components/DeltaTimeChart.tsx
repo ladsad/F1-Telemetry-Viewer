@@ -5,6 +5,7 @@ import { Card, CardHeader, CardTitle, CardContent } from "@/components/ui/card"
 import { OpenF1Service } from "@/lib/api/openf1"
 import type { OpenF1LapTime, OpenF1DeltaTime, OpenF1DriverInfo } from "@/lib/api/types"
 import { LineChart, Line, XAxis, YAxis, Tooltip, Legend, ResponsiveContainer } from "recharts"
+import { useTheme } from "@/components/ThemeProvider"
 
 type DeltaTimeChartProps = {
   sessionKey: string
@@ -17,6 +18,7 @@ export default function DeltaTimeChart({
   driverNumbers,
   referenceDriver,
 }: DeltaTimeChartProps) {
+  const { colors } = useTheme()
   const [series, setSeries] = useState<{ name: string; color: string; data: { lap: number; delta: number }[] }[]>([])
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
@@ -89,7 +91,7 @@ export default function DeltaTimeChart({
   }
 
   return (
-    <Card className="mt-4">
+    <Card className="mt-4" style={{ borderColor: colors.primary, background: colors.primary + "10" }}>
       <CardHeader>
         <CardTitle>Delta Time Chart</CardTitle>
       </CardHeader>

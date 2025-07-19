@@ -4,6 +4,7 @@ import { useEffect, useState } from "react"
 import { Card, CardHeader, CardTitle, CardContent } from "@/components/ui/card"
 import type { OpenF1LapTime, OpenF1SectorTiming } from "@/lib/api/types"
 import { OpenF1Service } from "@/lib/api/openf1"
+import { useTheme } from "@/components/ThemeProvider"
 
 type DriverPerformanceMetricsProps = {
   sessionKey: string
@@ -11,6 +12,7 @@ type DriverPerformanceMetricsProps = {
 }
 
 export default function DriverPerformanceMetrics({ sessionKey, driverNumber }: DriverPerformanceMetricsProps) {
+  const { colors } = useTheme()
   const [lapTimes, setLapTimes] = useState<OpenF1LapTime[]>([])
   const [sectorTimes, setSectorTimes] = useState<OpenF1SectorTiming[]>([])
   const [loading, setLoading] = useState(false)
@@ -60,7 +62,10 @@ export default function DriverPerformanceMetrics({ sessionKey, driverNumber }: D
   })
 
   return (
-    <Card className="mt-2">
+    <Card
+      className="mt-2 w-full h-full"
+      style={{ borderColor: colors.primary, background: colors.primary + "10" }}
+    >
       <CardHeader>
         <CardTitle>Performance Metrics</CardTitle>
       </CardHeader>

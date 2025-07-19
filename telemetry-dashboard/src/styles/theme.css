@@ -1,0 +1,62 @@
+:root {
+  --team-ferrari: #dc0000;
+  --team-mercedes: #00d2be;
+  --team-redbull: #1e41ff;
+  --team-mclaren: #ff8700;
+  --team-background: var(--team-ferrari);
+  --team-accent: #fff;
+
+  /* Light theme */
+  --background: #f7f7f7;
+  --foreground: #18181b;
+  --card: #fff;
+  --card-foreground: #18181b;
+  --accent: #e10600;
+}
+
+[data-theme="dark"] {
+  --background: #18181b;
+  --foreground: #e5e7eb;
+  --card: #232326;
+  --card-foreground: #e5e7eb;
+  --accent: #e10600;
+}
+
+[data-theme="light"] {
+  --background: #f7f7f7;
+  --foreground: #18181b;
+  --card: #fff;
+  --card-foreground: #18181b;
+  --accent: #e10600;
+}
+
+[data-team="ferrari"] {
+  --team-background: var(--team-ferrari);
+}
+[data-team="mercedes"] {
+  --team-background: var(--team-mercedes);
+}
+[data-team="redbull"] {
+  --team-background: var(--team-redbull);
+}
+[data-team="mclaren"] {
+  --team-background: var(--team-mclaren);
+}
+[data-team="alpine"] {
+  --team-background: var(--team-alpine);
+}
+[data-team="astonmartin"] {
+  --team-background: var(--team-astonmartin);
+}
+[data-team="haas"] {
+  --team-background: var(--team-haas);
+}
+[data-team="alphatauri"] {
+  --team-background: var(--team-alphatauri);
+}
+[data-team="alfa"] {
+  --team-background: var(--team-alfa);
+}
+[data-team="williams"] {
+  --team-background: var(--team-williams);
+}

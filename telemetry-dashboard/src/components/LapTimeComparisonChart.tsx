@@ -5,6 +5,8 @@ import { Card, CardHeader, CardTitle, CardContent } from "@/components/ui/card"
 import { OpenF1Service } from "@/lib/api/openf1"
 import type { OpenF1LapTime, OpenF1DriverInfo } from "@/lib/api/types"
 import { LineChart, Line, XAxis, YAxis, Tooltip, Legend, ResponsiveContainer } from "recharts"
+import { useTheme } from "@/components/ThemeProvider"
+import { Clock } from "lucide-react"
 
 type LapTimeComparisonChartProps = {
   sessionKey: string
@@ -21,6 +23,7 @@ export default function LapTimeComparisonChart({
   sessionKey,
   driverNumbers,
 }: LapTimeComparisonChartProps) {
+  const { colors } = useTheme()
   const [series, setSeries] = useState<Series[]>([])
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
@@ -74,22 +77,30 @@ export default function LapTimeComparisonChart({
   return (
     <Card className="mt-4">
       <CardHeader>
-        <CardTitle>Lap Time Comparison</CardTitle>
+        <CardTitle className="flex items-center gap-2">
+          <Clock className="w-5 h-5" />
+          Lap Time Comparison
+        </CardTitle>
       </CardHeader>
       <CardContent>
-        {loading && <div className="text-xs text-muted-foreground">Loading lap times...</div>}
-        {error && <div className="text-xs text-destructive">{error}</div>}
+        {loading && <div className="text-xs text-muted-foreground font-formula1">Loading lap times...</div>}
+        {error && <div className="text-xs text-destructive font-formula1">{error}</div>}
         {!loading && !error && (
           <ResponsiveContainer width="100%" height={300}>
             <LineChart data={chartData}>
-              <XAxis dataKey="lap" label={{ value: "Lap", position: "insideBottomRight", offset: -5 }} />
+              <XAxis 
+                dataKey="lap" 
+                label={{ value: "LAP", position: "insideBottomRight", offset: -5 }}
+                tick={{ fontFamily: "Formula1" }}
+              />
               <YAxis
-                label={{ value: "Lap Time (s)", angle: -90, position: "insideLeft" }}
+                label={{ value: "LAP TIME (s)", angle: -90, position: "insideLeft", fontFamily: "Formula1" }}
                 domain={["auto", "auto"]}
                 allowDecimals={true}
+                tick={{ fontFamily: "Formula1" }}
               />
-              <Tooltip />
-              <Legend />
+              <Tooltip contentStyle={{ fontFamily: "Formula1" }} />
+              <Legend wrapperStyle={{ fontFamily: "Formula1", textTransform: "uppercase" }} />
               {series.map((s) => (
                 <Line
                   key={s.name}

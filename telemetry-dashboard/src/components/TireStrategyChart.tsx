@@ -4,6 +4,7 @@ import { useEffect, useState } from "react"
 import { Card, CardHeader, CardTitle, CardContent } from "@/components/ui/card"
 import type { OpenF1TireStint } from "@/lib/api/types"
 import { OpenF1Service } from "@/lib/api/openf1"
+import { useTheme } from "@/components/ThemeProvider"
 
 const compoundColors: Record<string, string> = {
   Soft: "#ef4444",
@@ -19,6 +20,7 @@ type TireStrategyChartProps = {
 }
 
 export default function TireStrategyChart({ sessionKey, driverNumber }: TireStrategyChartProps) {
+  const { colors } = useTheme()
   const [stints, setStints] = useState<OpenF1TireStint[]>([])
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
@@ -53,7 +55,10 @@ export default function TireStrategyChart({ sessionKey, driverNumber }: TireStra
   const totalLaps = Math.max(...stints.map(s => s.end_lap))
 
   return (
-    <Card className="mt-2">
+    <Card
+      className="mt-2"
+      style={{ borderColor: colors.primary, background: colors.primary + "10" }}
+    >
       <CardHeader>
         <CardTitle>Tire Strategy</CardTitle>
       </CardHeader>

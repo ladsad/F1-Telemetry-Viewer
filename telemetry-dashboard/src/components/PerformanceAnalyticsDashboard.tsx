@@ -40,10 +40,10 @@ export default function PerformanceAnalyticsDashboard({
     <div>
       <div className="flex flex-wrap gap-4 mb-6 items-end">
         <div>
-          <label className="block text-sm font-medium mb-1">Drivers</label>
+          <label className="block text-sm font-formula1 font-medium mb-1 uppercase tracking-wider">Drivers</label>
           <select
             multiple
-            className="rounded px-2 py-1 text-sm border min-w-[120px]"
+            className="rounded px-2 py-1 text-sm border min-w-[120px] font-formula1"
             value={selectedDrivers.map(String)}
             onChange={e =>
               setSelectedDrivers(
@@ -52,35 +52,35 @@ export default function PerformanceAnalyticsDashboard({
             }
           >
             {DRIVER_OPTIONS.map(d => (
-              <option key={d.number} value={d.number}>
+              <option key={d.number} value={d.number} className="font-formula1">
                 #{d.number} {d.name}
               </option>
             ))}
           </select>
         </div>
         <div>
-          <label className="block text-sm font-medium mb-1">Reference Driver</label>
+          <label className="block text-sm font-formula1 font-medium mb-1 uppercase tracking-wider">Reference Driver</label>
           <select
-            className="rounded px-2 py-1 text-sm border"
+            className="rounded px-2 py-1 text-sm border font-formula1"
             value={referenceDriver}
             onChange={e => setReferenceDriver(Number(e.target.value))}
           >
             {selectedDrivers.map(num => (
-              <option key={num} value={num}>
+              <option key={num} value={num} className="font-formula1">
                 #{num}
               </option>
             ))}
           </select>
         </div>
         <div>
-          <label className="block text-sm font-medium mb-1">Metric</label>
+          <label className="block text-sm font-formula1 font-medium mb-1 uppercase tracking-wider">Metric</label>
           <select
-            className="rounded px-2 py-1 text-sm border"
+            className="rounded px-2 py-1 text-sm border font-formula1"
             value={selectedMetric}
             onChange={e => setSelectedMetric(e.target.value)}
           >
             {METRICS.map(m => (
-              <option key={m.key} value={m.key}>
+              <option key={m.key} value={m.key} className="font-formula1">
                 {m.label}
               </option>
             ))}

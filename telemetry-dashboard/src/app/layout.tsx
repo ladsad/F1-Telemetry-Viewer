@@ -1,11 +1,19 @@
 import type { ReactNode } from "react"
+import { ThemeProvider } from "@/components/ThemeProvider"
+import ThemeToggle from "@/components/ThemeToggle"
+import "@/styles/globals.css"
+import "@/styles/theme.css"
 
 export default function RootLayout({ children }: { children: ReactNode }) {
   return (
     <html lang="en">
       <body>
-        {/* Global header, nav, etc. */}
-        {children}
+        <ThemeProvider>
+          <div className="fixed top-4 right-4 z-50">
+            <ThemeToggle />
+          </div>
+          {children}
+        </ThemeProvider>
       </body>
     </html>
   )

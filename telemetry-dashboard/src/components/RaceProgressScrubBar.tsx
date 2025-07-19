@@ -2,6 +2,8 @@
 
 import { useEffect, useState } from "react"
 import { Slider } from "@/components/ui/slider"
+import { motion } from "framer-motion"
+import { useTheme } from "@/components/ThemeProvider"
 import type { OpenF1SessionEvent, OpenF1LapInfo } from "@/lib/api/types"
 import { OpenF1Service } from "@/lib/api/openf1"
 
@@ -43,28 +45,41 @@ export default function RaceProgressScrubBar({
   }, [sessionKey])
 
   if (!lapInfo) {
-    return <div className="text-xs text-muted-foreground">Loading race progress...</div>
+    return <div className="text-xs text-muted-foreground animate-pulse">Loading race progress...</div>
   }
 
   const totalLaps = lapInfo.totalLaps || 1
 
-  // Map events to lap numbers for marker placement
+  // Map events to lap numbers for marker placement with animations
   const lapMarkers = events.map((e, i) => {
     const lap = e.lap_number
     const percent = ((lap - 1) / (totalLaps - 1)) * 100
     return (
-      <div
+      <motion.div
         key={i}
         className={`absolute top-0 h-3 w-2 rounded ${EVENT_COLORS[e.type] || "bg-gray-400 border-gray-600"} border-2`}
         style={{ left: `calc(${percent}% - 1px)` }}
         title={`${e.type.toUpperCase()} - Lap ${lap}${e.description ? ": " + e.description : ""}`}
+        initial={{ opacity: 0, scale: 0 }}
+        animate={{ opacity: 1, scale: 1 }}
+        transition={{ delay: i * 0.05, type: "spring" }}
+        whileHover={{ 
+          scale: 1.5, 
+          zIndex: 20,
+          boxShadow: "0 0 8px rgba(255,255,255,0.5)" 
+        }}
       />
     )
   })
 
   return (
-    <div className="relative w-full my-4">
-      <div className="mb-1 flex justify-between text-xs text-muted-foreground">
+    <motion.div 
+      className="relative w-full my-4"
+      initial={{ opacity: 0 }}
+      animate={{ opacity: 1 }}
+      transition={{ duration: 0.5 }}
+    >
+      <div className="mb-1 flex justify-between text-xs text-muted-foreground font-formula1 uppercase tracking-wider">
         <span>Lap 1</span>
         <span>Lap {totalLaps}</span>
       </div>
@@ -77,20 +92,36 @@ export default function RaceProgressScrubBar({
           onValueChange={([v]) => onChange(v)}
           className="z-10"
         />
-        {/* Event markers */}
+        {/* Event markers with animation */}
         <div className="absolute left-0 top-1 w-full h-3 pointer-events-none z-0">
           {lapMarkers}
         </div>
       </div>
-      <div className="flex gap-3 mt-2 text-xs">
+      
+      {/* Dynamic lap indicator */}
+      <motion.div 
+        className="text-sm font-bold font-formula1 text-center mt-2"
+        key={value}
+        initial={{ opacity: 0, y: -10 }}
+        animate={{ opacity: 1, y: 0 }}
+        transition={{ type: "spring", stiffness: 300 }}
+      >
+        Lap {value}
+      </motion.div>
+      
+      <div className="flex gap-3 mt-2 text-xs font-formula1">
         {Object.entries(EVENT_COLORS).map(([type, color]) => (
-          <span key={type} className="flex items-center gap-1">
+          <motion.span 
+            key={type} 
+            className="flex items-center gap-1 uppercase tracking-wider"
+            whileHover={{ scale: 1.1 }}
+          >
             <span className={`inline-block w-3 h-3 rounded ${color}`} />
-            {type.charAt(0).toUpperCase() + type.slice(1)}
-          </span>
+            {type}
+          </motion.span>
         ))}
       </div>
-      {loading && <div className="text-xs text-muted-foreground mt-2">Loading events...</div>}
-    </div>
+      {loading && <div className="text-xs text-muted-foreground mt-2 font-formula1">Loading events...</div>}
+    </motion.div>
   )
 }

@@ -8,6 +8,8 @@ import { LineChart, Line, XAxis, YAxis, Tooltip, Legend, ResponsiveContainer, Re
 import { useTheme } from "@/components/ThemeProvider"
 import { Clock, ArrowUpDown, Download } from "lucide-react"
 import AnimatedButton from "@/components/AnimatedButton"
+import ConnectionStatusIndicator from "@/components/ConnectionStatusIndicator"
+import { Loader2 } from "lucide-react"
 
 type LapTimeComparisonChartProps = {
   sessionKey: string
@@ -116,6 +118,7 @@ export default function LapTimeComparisonChart({
           <CardTitle className="flex items-center gap-2 text-responsive-lg">
             <Clock className="w-6 h-6" />
             <span>Lap Time Comparison</span>
+            <ConnectionStatusIndicator service="timing" size="sm" showLabel={false} />
           </CardTitle>
           
           <div className="flex items-center gap-2">
@@ -166,8 +169,33 @@ export default function LapTimeComparisonChart({
         </div>
       </CardHeader>
       <CardContent className="p-responsive-md">
-        {loading && <div className="text-responsive-sm text-muted-foreground">Loading lap times...</div>}
-        {error && <div className="text-responsive-sm text-destructive">{error}</div>}
+        {loading && (
+          <div className="flex flex-col items-center justify-center p-8 h-64">
+            <Loader2 className="w-10 h-10 text-primary animate-spin mb-4" />
+            <div className="text-responsive-sm text-center">Loading lap times...</div>
+            <div className="text-xs text-muted-foreground mt-2">
+              {connectionStatus.timing === "closed" ? 
+                "Connection unavailable - using cached data" : 
+                "Fetching data from timing service..."}
+            </div>
+          </div>
+        )}
+        {error && (
+          <div className="flex flex-col items-center justify-center p-8 h-64">
+            <AlertTriangle className="w-10 h-10 text-destructive mb-4" />
+            <div className="text-destructive text-center mb-2">{error}</div>
+            <button 
+              className="px-4 py-2 rounded bg-primary text-white mt-4"
+              onClick={() => {
+                setLoading(true)
+                setError(null)
+                // Retry logic
+              }}
+            >
+              Retry
+            </button>
+          </div>
+        )}
         {!loading && !error && (
           <div 
             className="w-full h-[300px] md:h-[400px] relative touch-manipulation"

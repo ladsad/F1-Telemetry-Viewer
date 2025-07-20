@@ -163,6 +163,65 @@ export function TelemetryProvider({ children }: { children: React.ReactNode }) {
     }
   }, [carDataQueue.data]);
 
+  // Add offline detection
+  useEffect(() => {
+    function handleOnline() {
+      // When back online, try to reconnect all WebSockets
+      setConnectionStatus(prev => ({
+        ...prev,
+        telemetry: 'connecting',
+        positions: 'connecting',
+        timing: 'connecting',
+      }))
+    }
+    
+    function handleOffline() {
+      // When offline, mark all connections as closed
+      setConnectionStatus({
+        telemetry: 'closed',
+        positions: 'closed',
+        timing: 'closed',
+      })
+    }
+    
+    window.addEventListener('online', handleOnline)
+    window.addEventListener('offline', handleOffline)
+    
+    return () => {
+      window.removeEventListener('online', handleOnline)
+      window.removeEventListener('offline', handleOffline)
+    }
+  }, [])
+
+  // Add connection recovery mechanism
+  useEffect(() => {
+    // Check status periodically and attempt reconnection for closed connections
+    const recoveryInterval = setInterval(() => {
+      if (navigator.onLine) {
+        if (connectionStatus.telemetry === 'closed') {
+          setConnectionStatus(prev => ({
+            ...prev,
+            telemetry: 'connecting'
+          }))
+        }
+        if (connectionStatus.positions === 'closed') {
+          setConnectionStatus(prev => ({
+            ...prev,
+            positions: 'connecting'
+          }))
+        }
+        if (connectionStatus.timing === 'closed') {
+          setConnectionStatus(prev => ({
+            ...prev,
+            timing: 'connecting'
+          }))
+        }
+      }
+    }, 10000) // Try every 10 seconds
+    
+    return () => clearInterval(recoveryInterval)
+  }, [connectionStatus])
+
   // Method to update entire telemetry state
   const updateTelemetryState = useCallback((update: Partial<TelemetryState>) => {
     setTelemetryState(prev => ({ ...prev, ...update }));

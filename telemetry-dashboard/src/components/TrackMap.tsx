@@ -10,6 +10,8 @@ import { OpenF1Service } from "@/lib/api/openf1";
 import AnimatedButton from "@/components/AnimatedButton";
 import { useTelemetry } from "@/context/TelemetryDataContext";
 import { useState } from "react";
+import ConnectionStatusIndicator from "@/components/ConnectionStatusIndicator";
+import { Loader2 } from "lucide-react";
 
 // Types for sector time display
 type SectorTimeDisplay = {
@@ -215,6 +217,7 @@ export default function TrackMap() {
             </CardTitle>
             
             <div className="flex items-center gap-2">
+              <ConnectionStatusIndicator service="positions" size="sm" />
               <AnimatedButton 
                 variant="ghost"
                 size="sm"
@@ -342,18 +345,34 @@ export default function TrackMap() {
             </svg>
           </div>
           
-          {/* Connection status indicator */}
-          <div className="mt-2 flex justify-center">
-            <span className={`text-xs ${
-              connectionStatus.positions === 'open' ? 'text-green-500' :
-              connectionStatus.positions === 'connecting' ? 'text-amber-500' :
-              'text-red-500'
-            }`}>
-              {connectionStatus.positions === 'open' ? 'Live Data' :
-               connectionStatus.positions === 'connecting' ? 'Connecting...' :
-               'Using Polling'}
-            </span>
-          </div>
+          {/* Loading state for track layout */}
+          {!layout.svgPath || layout.svgPath === "M0,0" ? (
+            <div className="flex items-center justify-center h-64 w-full">
+              <motion.div 
+                className="flex flex-col items-center"
+                initial={{ opacity: 0 }}
+                animate={{ opacity: 1 }}
+                transition={{ duration: 0.5 }}
+              >
+                <Loader2 className="w-12 h-12 text-muted-foreground animate-spin mb-4" />
+                <p className="text-muted-foreground">Loading track layout...</p>
+              </motion.div>
+            </div>
+          ) : null}
+          
+          {/* Fallback message for no positions data */}
+          {positions.length === 0 && connectionStatus.positions !== "connecting" && (
+            <div className="absolute inset-0 flex items-center justify-center bg-background/70 z-10">
+              <div className="text-center p-4">
+                <p className="font-semibold mb-1">No position data available</p>
+                <p className="text-sm text-muted-foreground">
+                  {connectionStatus.positions === "closed" || connectionStatus.positions === "error" ? 
+                    "Connection to position service unavailable" : 
+                    "Waiting for position data..."}
+                </p>
+              </div>
+            </div>
+          )}
         </CardContent>
       </Card>
     </motion.div>

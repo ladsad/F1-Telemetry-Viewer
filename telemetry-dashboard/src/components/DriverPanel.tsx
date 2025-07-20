@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from "react"
 import { Card, CardHeader, CardTitle, CardContent } from "@/components/ui/card"
-import { ChevronDown, Circle, Zap, Wrench } from "lucide-react"
+import { ChevronDown, Circle, Zap, Wrench, Loader2 } from "lucide-react"
 import { motion, AnimatePresence } from "framer-motion"
 import { useTheme } from "@/components/ThemeProvider"
 import { HelmetIcon } from "@/components/Icons"
@@ -11,6 +11,7 @@ import TireStrategyChart from "@/components/TireStrategyChart"
 import DriverRadio from "@/components/DriverRadio"
 import { OpenF1Service } from "@/lib/api/openf1"
 import { useTelemetry } from "@/context/TelemetryDataContext"
+import ConnectionStatusIndicator from "@/components/ConnectionStatusIndicator"
 
 const compoundColors: Record<string, string> = {
   Soft: "bg-red-500",
@@ -29,7 +30,8 @@ export function DriverPanel() {
     telemetryState, 
     updateDriverStatus,
     selectedDriverNumber,
-    sessionKey
+    sessionKey,
+    connectionStatus
   } = useTelemetry()
   
   // Get driver status from context
@@ -71,14 +73,20 @@ export function DriverPanel() {
   if (!driverStatus) {
     return (
       <Card 
-        className="w-full h-full animate-pulse"
+        className="w-full h-full"
         style={{ borderColor: colors.primary, background: colors.primary + "10" }}
       >
         <CardHeader>
           <CardTitle className="text-responsive-lg">Driver Panel</CardTitle>
         </CardHeader>
-        <CardContent>
+        <CardContent className="flex flex-col items-center justify-center p-8">
+          <Loader2 className="w-10 h-10 text-primary animate-spin mb-4" />
           <div className="text-muted-foreground text-responsive-sm">Loading driver data...</div>
+          <div className="text-xs text-muted-foreground mt-2">
+            {connectionStatus.timing === "closed" ? 
+              "Connection unavailable - check network" : 
+              "Connecting to timing service..."}
+          </div>
         </CardContent>
       </Card>
     );
@@ -106,10 +114,11 @@ export function DriverPanel() {
           >
             <HelmetIcon className="w-8 h-8" style={{ color: driverStatus.teamColor }} />
           </motion.div>
-          <div>
+          <div className="flex items-center gap-2">
             <CardTitle className="text-responsive-lg truncate max-w-[150px] sm:max-w-none">
               {driverStatus.driver_name}
             </CardTitle>
+            <ConnectionStatusIndicator service="timing" size="sm" showLabel={false} />
             <div className="text-responsive-xs text-muted-foreground">#{driverStatus.driver_number}</div>
           </div>
         </motion.div>
@@ -124,8 +133,13 @@ export function DriverPanel() {
       
       <CardContent className="flex flex-col gap-responsive-md p-responsive-md">
         <div className="flex flex-row items-center flex-wrap gap-2 tap-target p-2">
-          <Circle className={`w-6 h-6 ${compoundColors[driverStatus.tire_compound] || "bg-gray-200"} flex-shrink-0`} />
-          <span className="font-semibold text-responsive-base">{driverStatus.tire_compound} Tire</span>
+          <Circle className={`w-6 h-6 ${compoundColors[driverStatus.tire_compound] || "bg-gray-200"} 
+            flex-shrink-0 ${connectionStatus.timing !== "open" ? "opacity-60" : ""}`} />
+          <span className="font-semibold text-responsive-base">
+            {driverStatus.tire_compound} Tire
+            {connectionStatus.timing !== "open" && 
+              <span className="text-xs font-normal text-muted-foreground ml-2">(cached)</span>}
+          </span>
           <span className="text-responsive-xs text-muted-foreground">({driverStatus.tire_age} laps)</span>
         </div>
         

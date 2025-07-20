@@ -7,6 +7,8 @@ import { useTheme } from "@/components/ThemeProvider"
 import type { OpenF1Event, OpenF1LapInfo } from "@/lib/api/types"
 import { OpenF1Service } from "@/lib/api/openf1"
 import { useTelemetry } from "@/context/TelemetryDataContext"
+import ConnectionStatusIndicator from "@/components/ConnectionStatusIndicator"
+import { Loader2 } from "lucide-react"
 
 const EVENT_COLORS = {
   "overtake": "bg-yellow-500 border-yellow-600",
@@ -143,6 +145,21 @@ export default function RaceProgressScrubBar({ onChange }: RaceProgressScrubBarP
       style={{ borderColor: colors.primary, background: colors.primary + "10" }}
     >
       <CardContent className="p-responsive-md">
+        {/* Connection status and loading state */}
+        <div className="flex justify-between items-center mb-4">
+          <div className="flex items-center gap-2">
+            <span className="font-formula1">Race Progress</span>
+            <ConnectionStatusIndicator service="timing" size="sm" showLabel={false} />
+          </div>
+          
+          {loading && (
+            <div className="flex items-center gap-2">
+              <Loader2 className="w-4 h-4 animate-spin" />
+              <span className="text-xs text-muted-foreground">Loading events...</span>
+            </div>
+          )}
+        </div>
+        
         <div className="mb-2 flex justify-between text-responsive-sm font-formula1 uppercase tracking-wider">
           <span>Lap 1</span>
           <span>Lap {totalLaps}</span>
@@ -152,13 +169,11 @@ export default function RaceProgressScrubBar({ onChange }: RaceProgressScrubBarP
           {/* Scrub bar track */}
           <div 
             ref={barRef}
-            className="absolute left-0 top-3 w-full h-6 bg-accent/20 rounded-full cursor-pointer"
-            onMouseDown={(e) => handleInteractionStart(e.clientX)}
-            onTouchStart={(e) => {
-              e.preventDefault(); // Prevent scrolling while scrubbing
-              if (e.touches[0]) handleInteractionStart(e.touches[0].clientX)
-            }}
-            style={{ touchAction: 'none' }}
+            className={`relative w-full h-4 bg-muted rounded-full mb-4 cursor-pointer ${
+              connectionStatus.timing !== "open" ? "opacity-70" : ""
+            }`}
+            onClick={handleBarClick}
+            onTouchStart={handleBarTouch}
           >
             {/* Active part of the track */}
             <div 
@@ -218,9 +233,9 @@ export default function RaceProgressScrubBar({ onChange }: RaceProgressScrubBarP
           ))}
         </div>
         
-        {loading && (
-          <div className="text-responsive-xs text-muted-foreground mt-2 font-formula1 text-center">
-            Loading events...
+        {connectionStatus.timing === "closed" && !loading && (
+          <div className="text-xs text-amber-500 text-center mt-2 font-formula1">
+            Connection offline - race progress updates paused
           </div>
         )}
       </CardContent>

@@ -10,10 +10,12 @@ import { useTelemetry } from "@/context/TelemetryDataContext";
 import WeatherAlert from "@/components/WeatherAlert";
 import WeatherImpactIndicator from "@/components/WeatherImpactIndicator";
 import WeatherTrendChart from "@/components/WeatherTrendChart";
+import ConnectionStatusIndicator from "@/components/ConnectionStatusIndicator"
+import { Loader2 } from "lucide-react"
 
 export function WeatherOverlay() {
   const { colors } = useTheme();
-  const { telemetryState, updateWeather, sessionKey } = useTelemetry();
+  const { telemetryState, updateWeather, sessionKey, connectionStatus } = useTelemetry();
   const { weather } = telemetryState;
   
   // Fetch weather data on mount and periodically
@@ -68,10 +70,17 @@ export function WeatherOverlay() {
           <CardTitle className="flex items-center gap-2">
             <CloudRain className="w-5 h-5" />
             <span>Weather Conditions</span>
+            <ConnectionStatusIndicator size="sm" showLabel={false} />
           </CardTitle>
         </CardHeader>
-        <CardContent>
-          <div className="text-muted-foreground text-sm font-formula1">Loading weather data...</div>
+        <CardContent className="flex flex-col items-center justify-center p-8">
+          <Loader2 className="w-10 h-10 text-blue-500 animate-spin mb-4" />
+          <div className="font-formula1 text-center">Loading weather data...</div>
+          <div className="text-xs text-muted-foreground mt-2">
+            {connectionStatus.telemetry === "closed" ? 
+              "Connection unavailable - check network" : 
+              "Connecting to weather service..."}
+          </div>
         </CardContent>
       </Card>
     );
@@ -103,6 +112,7 @@ export function WeatherOverlay() {
               <CloudRain className="w-5 h-5" />
             </motion.div>
             <span>Weather Conditions</span>
+            <ConnectionStatusIndicator size="sm" showLabel={false} />
           </CardTitle>
         </CardHeader>
         <CardContent>

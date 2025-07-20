@@ -6,6 +6,7 @@ import Sidebar from "@/components/layout/Sidebar"
 import Header from "@/components/layout/Header"
 import MobileNav from "@/components/layout/MobileNav"
 import { useTheme } from "@/components/ThemeProvider"
+import { TelemetryProvider } from "@/context/TelemetryDataContext"
 
 export default function AnalyticsDashboardPage() {
   const sessionKey = "latest"
@@ -30,9 +31,11 @@ export default function AnalyticsDashboardPage() {
           <div className="w-full card-transition card-hover"
             style={{ borderColor: colors.primary, background: colors.primary + "10" }}
           >
-            <Suspense fallback={<AnalyticsLoadingSkeleton />}>
-              <PerformanceAnalyticsDashboard sessionKey={sessionKey} />
-            </Suspense>
+            <TelemetryProvider initialSessionKey={sessionKey}>
+              <Suspense fallback={<AnalyticsLoadingSkeleton />}>
+                <PerformanceAnalyticsDashboard sessionKey={sessionKey} />
+              </Suspense>
+            </TelemetryProvider>
           </div>
         </main>
       </div>

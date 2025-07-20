@@ -6,6 +6,7 @@ type QueueOptions = {
   debounceMs?: number; // How long to wait after updates stop (debounce)
   maxQueueSize?: number; // Maximum size before older items are dropped
   processStrategy?: 'latest' | 'average' | 'smooth'; // How to process multiple items
+  onProcessedData?: (data: any) => void; // Callback for processed data
 };
 
 /**
@@ -14,6 +15,7 @@ type QueueOptions = {
  * - Optionally debounces to ensure final value is always rendered
  * - Can limit queue size to prevent memory issues with very high frequency data
  * - Supports different processing strategies (latest, average, smooth)
+ * - Can notify external context through onProcessedData callback
  */
 export function useTelemetryQueue<T>(options: QueueOptions = {}) {
   const {
@@ -21,6 +23,7 @@ export function useTelemetryQueue<T>(options: QueueOptions = {}) {
     debounceMs = 200, // Wait 200ms after updates stop to ensure final value
     maxQueueSize = 1000, // Limit queue size to prevent memory issues
     processStrategy = 'latest', // Default to using latest value
+    onProcessedData, // Optional callback for processed data
   } = options;
 
   const [data, setData] = useState<T | null>(null);
@@ -82,9 +85,19 @@ export function useTelemetryQueue<T>(options: QueueOptions = {}) {
             result = queueRef.current[queueRef.current.length - 1];
           }
           break;
+          
+        default:
+          result = queueRef.current[queueRef.current.length - 1];
       }
       
+      // Update internal state
       setData(result);
+      
+      // Notify the context if callback provided
+      if (onProcessedData) {
+        onProcessedData(result);
+      }
+      
       queueRef.current = [];
       processingRef.current = false;
     }, throttleMs)

@@ -1,12 +1,12 @@
 "use client"
 
-import { useState } from "react"
+import { useState, useEffect } from "react"
 import LapTimeComparisonChart from "@/components/LapTimeComparisonChart"
 import DeltaTimeChart from "@/components/DeltaTimeChart"
 import RaceProgressScrubBar from "@/components/RaceProgressScrubBar"
-import type { AnalyticsMetric, AnalyticsFilter } from "@/lib/api/types"
+import { useTelemetry } from "@/context/TelemetryDataContext"
 
-const METRICS: AnalyticsMetric[] = [
+const METRICS = [
   { key: "lapTime", label: "Lap Time Comparison" },
   { key: "deltaTime", label: "Delta Time Chart" },
   { key: "raceProgress", label: "Race Progress Scrub Bar" },
@@ -21,19 +21,25 @@ const DRIVER_OPTIONS = [
 
 type Props = {
   sessionKey: string
-  initialDrivers?: number[]
   initialMetric?: string
 }
 
 export default function PerformanceAnalyticsDashboard({
   sessionKey,
-  initialDrivers = [1, 16, 44],
   initialMetric = "lapTime",
 }: Props) {
-  const [selectedDrivers, setSelectedDrivers] = useState<number[]>(initialDrivers)
-  const [referenceDriver, setReferenceDriver] = useState<number>(initialDrivers[0])
+  const { telemetryState } = useTelemetry()
+  const { raceProgress } = telemetryState
+  
+  const [selectedDrivers, setSelectedDrivers] = useState<number[]>([1, 16, 44])
+  const [referenceDriver, setReferenceDriver] = useState<number>(1)
   const [selectedMetric, setSelectedMetric] = useState<string>(initialMetric)
-  const [lap, setLap] = useState(1)
+  const [lap, setLap] = useState(raceProgress.currentLap || 1)
+  
+  // Update lap when race progress changes
+  useEffect(() => {
+    setLap(raceProgress.currentLap || 1)
+  }, [raceProgress.currentLap])
 
   return (
     <div className="p-2 sm:p-4">

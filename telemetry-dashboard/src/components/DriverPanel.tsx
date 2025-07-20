@@ -2,13 +2,15 @@
 
 import { useEffect, useState } from "react"
 import { Card, CardHeader, CardTitle, CardContent } from "@/components/ui/card"
-import { ChevronDown, ChevronUp, Circle, Zap, Wrench } from "lucide-react"
+import { ChevronDown, Circle, Zap, Wrench } from "lucide-react"
 import { motion, AnimatePresence } from "framer-motion"
 import { useTheme } from "@/components/ThemeProvider"
-import { HelmetIcon, TireIcon, ERSIcon, PitIcon } from "@/components/Icons"
+import { HelmetIcon } from "@/components/Icons"
 import DriverPerformanceMetrics from "@/components/DriverPerformanceMetrics"
 import TireStrategyChart from "@/components/TireStrategyChart"
 import DriverRadio from "@/components/DriverRadio"
+import { OpenF1Service } from "@/lib/api/openf1"
+import { useTelemetry } from "@/context/TelemetryDataContext"
 
 const compoundColors: Record<string, string> = {
   Soft: "bg-red-500",
@@ -18,40 +20,60 @@ const compoundColors: Record<string, string> = {
   Wet: "bg-blue-500",
 }
 
-type DriverPanelProps = {
-  sessionKey: string
-  driverNumber: number
-}
-
-export function DriverPanel({ sessionKey, driverNumber }: DriverPanelProps) {
+export function DriverPanel() {
   const { colors } = useTheme()
   const [expanded, setExpanded] = useState(false)
-  const [status, setStatus] = useState<OpenF1DriverStatus | null>(null)
   
+  // Access telemetry context
+  const { 
+    telemetryState, 
+    updateDriverStatus,
+    selectedDriverNumber,
+    sessionKey
+  } = useTelemetry()
+  
+  // Get driver status from context
+  const driverStatus = telemetryState.driverStatus?.[selectedDriverNumber]
+  
+  // Fetch driver status on mount and when driver changes
   useEffect(() => {
-    const openf1 = new OpenF1Service("https://api.openf1.org/v1")
-    let mounted = true
+    if (!sessionKey || !selectedDriverNumber) return;
+    
+    let mounted = true;
+    
     async function fetchStatus() {
       try {
-        const data = await openf1.getDriverStatus(sessionKey, driverNumber)
-        if (mounted) setStatus(data)
-      } catch {
-        if (mounted) setStatus(null)
+        const openf1 = new OpenF1Service("https://api.openf1.org/v1");
+        const data = await openf1.getDriverStatus(sessionKey, selectedDriverNumber);
+        
+        if (mounted && data) {
+          updateDriverStatus(selectedDriverNumber, data);
+        }
+      } catch (err) {
+        console.error("Error fetching driver status:", err);
       }
     }
-    fetchStatus()
-    const interval = setInterval(fetchStatus, 5000)
+    
+    fetchStatus();
+    
+    const interval = setInterval(fetchStatus, 5000);
+    
     return () => {
-      mounted = false
-      clearInterval(interval)
-    }
-  }, [sessionKey, driverNumber])
+      mounted = false;
+      clearInterval(interval);
+    };
+  }, [sessionKey, selectedDriverNumber]);
 
-  const toggleExpand = () => setExpanded(prev => !prev)
+  // Toggle panel expansion
+  const toggleExpand = () => setExpanded(prev => !prev);
 
-  if (!status) {
+  // Show loading state if no driver data
+  if (!driverStatus) {
     return (
-      <Card className="w-full h-full animate-pulse">
+      <Card 
+        className="w-full h-full animate-pulse"
+        style={{ borderColor: colors.primary, background: colors.primary + "10" }}
+      >
         <CardHeader>
           <CardTitle className="text-responsive-lg">Driver Panel</CardTitle>
         </CardHeader>
@@ -59,7 +81,7 @@ export function DriverPanel({ sessionKey, driverNumber }: DriverPanelProps) {
           <div className="text-muted-foreground text-responsive-sm">Loading driver data...</div>
         </CardContent>
       </Card>
-    )
+    );
   }
 
   return (
@@ -82,13 +104,13 @@ export function DriverPanel({ sessionKey, driverNumber }: DriverPanelProps) {
             whileTap={{ rotate: 20 }}
             transition={{ duration: 0.2 }}
           >
-            <HelmetIcon className="w-8 h-8" style={{ color: status.teamColor }} />
+            <HelmetIcon className="w-8 h-8" style={{ color: driverStatus.teamColor }} />
           </motion.div>
           <div>
             <CardTitle className="text-responsive-lg truncate max-w-[150px] sm:max-w-none">
-              {status.driver_name}
+              {driverStatus.driver_name}
             </CardTitle>
-            <div className="text-responsive-xs text-muted-foreground">#{status.driver_number}</div>
+            <div className="text-responsive-xs text-muted-foreground">#{driverStatus.driver_number}</div>
           </div>
         </motion.div>
         <motion.div
@@ -102,9 +124,9 @@ export function DriverPanel({ sessionKey, driverNumber }: DriverPanelProps) {
       
       <CardContent className="flex flex-col gap-responsive-md p-responsive-md">
         <div className="flex flex-row items-center flex-wrap gap-2 tap-target p-2">
-          <Circle className={`w-6 h-6 ${compoundColors[status.tire_compound] || "bg-gray-200"} flex-shrink-0`} />
-          <span className="font-semibold text-responsive-base">{status.tire_compound} Tire</span>
-          <span className="text-responsive-xs text-muted-foreground">({status.tire_age} laps)</span>
+          <Circle className={`w-6 h-6 ${compoundColors[driverStatus.tire_compound] || "bg-gray-200"} flex-shrink-0`} />
+          <span className="font-semibold text-responsive-base">{driverStatus.tire_compound} Tire</span>
+          <span className="text-responsive-xs text-muted-foreground">({driverStatus.tire_age} laps)</span>
         </div>
         
         <AnimatePresence>
@@ -119,14 +141,14 @@ export function DriverPanel({ sessionKey, driverNumber }: DriverPanelProps) {
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-responsive-sm">
                 <div className="flex items-center gap-2 tap-target p-2">
                   <Zap className="w-6 h-6 text-purple-500 flex-shrink-0" />
-                  <span className="font-semibold text-responsive-base">{status.ers}%</span>
+                  <span className="font-semibold text-responsive-base">{driverStatus.ers}%</span>
                   <span className="text-responsive-xs text-muted-foreground">ERS</span>
                 </div>
                 <div className="flex items-center gap-2 tap-target p-2">
                   <Wrench className="w-6 h-6 text-orange-400 flex-shrink-0" />
-                  <span className="font-semibold text-responsive-base">{status.pit_status}</span>
+                  <span className="font-semibold text-responsive-base">{driverStatus.pit_status}</span>
                   <span className="text-responsive-xs text-muted-foreground truncate">
-                    {status.last_pit ? `Last: Lap ${status.last_pit}` : ""}
+                    {driverStatus.last_pit ? `Last: Lap ${driverStatus.last_pit}` : ""}
                   </span>
                 </div>
               </div>
@@ -137,7 +159,7 @@ export function DriverPanel({ sessionKey, driverNumber }: DriverPanelProps) {
                 animate={{ opacity: 1, y: 0 }}
                 transition={{ delay: 0.1 }}
               >
-                <DriverPerformanceMetrics sessionKey={sessionKey} driverNumber={driverNumber} />
+                <DriverPerformanceMetrics />
               </motion.div>
               
               <motion.div
@@ -145,7 +167,7 @@ export function DriverPanel({ sessionKey, driverNumber }: DriverPanelProps) {
                 animate={{ opacity: 1, y: 0 }}
                 transition={{ delay: 0.2 }}
               >
-                <TireStrategyChart sessionKey={sessionKey} driverNumber={driverNumber} />
+                <TireStrategyChart />
               </motion.div>
               
               <motion.div
@@ -153,14 +175,14 @@ export function DriverPanel({ sessionKey, driverNumber }: DriverPanelProps) {
                 animate={{ opacity: 1, y: 0 }}
                 transition={{ delay: 0.3 }}
               >
-                <DriverRadio sessionKey={sessionKey} driverNumber={driverNumber} />
+                <DriverRadio />
               </motion.div>
             </motion.div>
           )}
         </AnimatePresence>
       </CardContent>
     </Card>
-  )
+  );
 }
 
 function MetricRow({ icon, label, value, detail }) {

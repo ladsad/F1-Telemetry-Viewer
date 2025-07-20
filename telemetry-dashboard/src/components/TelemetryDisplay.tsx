@@ -8,34 +8,23 @@ import { useTheme } from "@/components/ThemeProvider";
 import { SpeedometerIcon, ERSIcon } from "@/components/Icons";
 import AnimatedButton from "@/components/AnimatedButton";
 import { useWebSocket } from "@/lib/hooks/useWebSocket";
-
-// Telemetry data type
-type TelemetryData = {
-  speed: number;
-  throttle: number;
-  brake: number;
-  gear: number;
-  drs: boolean;
-  rpm: number;
-};
+import { useTelemetry } from "@/context/TelemetryDataContext";
 
 type TelemetryDisplayProps = {
-  sessionKey?: string;
-  wsUrl?: string;
-  fallbackApiUrl?: string;
   refreshIntervalMs?: number;
+  fallbackApiUrl?: string;
 };
 
 const TELEMETRY_CACHE_KEY = "telemetry_last_data";
 
 // Cache utility functions
-function saveTelemetryToCache(data: TelemetryData) {
+function saveTelemetryToCache(data: any) {
   try {
     localStorage.setItem(TELEMETRY_CACHE_KEY, JSON.stringify(data));
   } catch {}
 }
 
-function loadTelemetryFromCache(): TelemetryData | null {
+function loadTelemetryFromCache(): any {
   try {
     const raw = localStorage.getItem(TELEMETRY_CACHE_KEY);
     if (!raw) return null;
@@ -48,47 +37,49 @@ function loadTelemetryFromCache(): TelemetryData | null {
 export default function TelemetryDisplay(props: TelemetryDisplayProps) {
   const { colors } = useTheme();
   
-  // State for telemetry data and UI
-  const [cachedData, setCachedData] = useState<TelemetryData | null>(null);
-  const [isRefreshing, setIsRefreshing] = useState(false);
-  const [connectionStatus, setConnectionStatus] = useState("idle");
-  const [prevData, setPrevData] = useState<TelemetryData | null>(null);
-  
-  // Use enhanced WebSocket hook with queue integration
-  const wsEndpoint = props.wsUrl && props.sessionKey
-    ? `${props.wsUrl}?session_key=${props.sessionKey}`
-    : null;
-    
+  // Get data and connection status from context
   const { 
-    data: liveData, 
-    status: wsStatus,
-    queueLength 
-  } = useWebSocket<TelemetryData>(wsEndpoint, {
-    onStatusChange: (status) => setConnectionStatus(status),
-    queueOptions: {
-      throttleMs: 150,           // Update UI at most every 150ms
-      processStrategy: 'smooth', // Smooth values to prevent jumpy UI
-    }
-  });
+    telemetryState, 
+    updateCarData,
+    connectionStatus 
+  } = useTelemetry();
 
+  // Local state for animations and UI
+  const [prevData, setPrevData] = useState<any>(null);
+  const [isRefreshing, setIsRefreshing] = useState(false);
+  
+  // Get car data from context
+  const { carData } = telemetryState;
+  
   // Load cached telemetry on mount
   useEffect(() => {
     const cached = loadTelemetryFromCache();
-    if (cached) setCachedData(cached);
+    if (cached) {
+      updateCarData(cached);
+    }
   }, []);
   
-  // Save to cache when live data updates
+  // Save to cache when data updates
   useEffect(() => {
-    if (liveData) {
-      setPrevData(cachedData); // Store previous for animations
-      setCachedData(liveData);
-      saveTelemetryToCache(liveData);
+    if (carData) {
+      setPrevData(prevData => {
+        // Only update prevData if carData has changed significantly
+        const shouldUpdate = !prevData || 
+          Math.abs(prevData.speed - carData.speed) > 2 ||
+          Math.abs(prevData.throttle - carData.throttle) > 5 ||
+          Math.abs(prevData.brake - carData.brake) > 5 ||
+          prevData.gear !== carData.gear ||
+          prevData.drs !== carData.drs;
+          
+        return shouldUpdate ? { ...carData } : prevData;
+      });
+      saveTelemetryToCache(carData);
     }
-  }, [liveData]);
+  }, [carData]);
 
   // Fallback: Poll REST API if no WebSocket or on error
   useEffect(() => {
-    if (!props.fallbackApiUrl || wsStatus === "open") return;
+    if (!props.fallbackApiUrl || connectionStatus.telemetry === "open") return;
 
     let mounted = true;
     let interval: NodeJS.Timeout;
@@ -100,12 +91,10 @@ export default function TelemetryDisplay(props: TelemetryDisplayProps) {
         if (!res.ok) return;
         
         const latest = await res.json();
-        const newData: TelemetryData = latest[0] || latest;
+        const newData = latest[0] || latest;
         
         if (mounted) {
-          setPrevData(cachedData);
-          setCachedData(newData);
-          saveTelemetryToCache(newData);
+          updateCarData(newData);
         }
       } catch {
         // Ignore fetch errors
@@ -119,53 +108,67 @@ export default function TelemetryDisplay(props: TelemetryDisplayProps) {
       mounted = false;
       clearInterval(interval);
     };
-  }, [props.fallbackApiUrl, wsStatus, props.refreshIntervalMs, cachedData]);
-
-  // Determine what data to display, with fallbacks
-  const display = cachedData || {
-    speed: 0,
-    throttle: 0,
-    brake: 0,
-    gear: 0,
-    drs: false,
-    rpm: 0,
-  };
+  }, [props.fallbackApiUrl, connectionStatus.telemetry, props.refreshIntervalMs]);
 
   // Touch-friendly refresh handler
   const handleRefresh = useCallback(() => {
     setIsRefreshing(true);
     
-    // Implement manual refresh logic
-    setTimeout(() => setIsRefreshing(false), 1000);
-  }, []);
+    // Manual refresh logic
+    if (props.fallbackApiUrl) {
+      fetch(props.fallbackApiUrl)
+        .then(res => res.json())
+        .then(data => {
+          updateCarData(data[0] || data);
+          setIsRefreshing(false);
+        })
+        .catch(() => {
+          setIsRefreshing(false);
+        });
+    } else {
+      setTimeout(() => setIsRefreshing(false), 500);
+    }
+  }, [props.fallbackApiUrl]);
 
   // Whether to show the manual refresh button
-  const showRefreshControl = !wsEndpoint && !!props.fallbackApiUrl;
+  const showRefreshControl = connectionStatus.telemetry !== "open" && !!props.fallbackApiUrl;
 
   // Connection indicator
   const connectionIndicator = () => {
-    if (wsStatus === "open") {
+    const status = connectionStatus.telemetry;
+    
+    if (status === "open") {
       return <span className="flex items-center gap-1 text-xs text-green-500">
         <span className="w-2 h-2 bg-green-500 rounded-full animate-pulse"></span>
-        Live {queueLength > 0 ? `(${queueLength})` : ''}
+        Live
       </span>;
     }
     
-    if (wsStatus === "connecting") {
+    if (status === "connecting") {
       return <span className="flex items-center gap-1 text-xs text-amber-500">
         <span className="w-2 h-2 bg-amber-500 rounded-full"></span>
         Connecting...
       </span>;
     }
     
-    if (wsStatus === "error" || wsStatus === "closed") {
+    if (status === "error" || status === "closed") {
       return <span className="flex items-center gap-1 text-xs text-red-500">
         <AlertCircle className="w-3 h-3" />
-        {wsStatus === "error" ? "Connection Error" : "Disconnected"}
+        {status === "error" ? "Connection Error" : "Disconnected"}
       </span>;
     }
     
     return null;
+  };
+
+  // The data to display
+  const display = carData || {
+    speed: 0,
+    throttle: 0,
+    brake: 0,
+    gear: 0,
+    drs: false,
+    rpm: 0,
   };
 
   return (
@@ -269,8 +272,9 @@ export default function TelemetryDisplay(props: TelemetryDisplayProps) {
 }
 
 function MetricDisplay({ icon, value, unit, label, prevValue }) {
-  // Determine if the value has changed for animation
-  const hasChanged = prevValue !== undefined && prevValue !== parseFloat(value);
+  // Determine if the value has changed significantly for animation
+  const hasChanged = prevValue !== undefined && 
+    Math.abs(parseFloat(prevValue) - parseFloat(value)) > (label === "Speed" ? 2 : 5);
   
   return (
     <div className="flex flex-col items-center justify-center tap-target p-responsive-sm">

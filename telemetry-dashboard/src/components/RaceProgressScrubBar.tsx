@@ -6,6 +6,7 @@ import { motion } from "framer-motion"
 import { useTheme } from "@/components/ThemeProvider"
 import type { OpenF1Event, OpenF1LapInfo } from "@/lib/api/types"
 import { OpenF1Service } from "@/lib/api/openf1"
+import { useTelemetry } from "@/context/TelemetryDataContext"
 
 const EVENT_COLORS = {
   "overtake": "bg-yellow-500 border-yellow-600",
@@ -15,24 +16,21 @@ const EVENT_COLORS = {
 }
 
 type RaceProgressScrubBarProps = {
-  sessionKey: string
-  value: number
   onChange: (lap: number) => void
 }
 
-export default function RaceProgressScrubBar({
-  sessionKey,
-  value,
-  onChange,
-}: RaceProgressScrubBarProps) {
+export default function RaceProgressScrubBar({ onChange }: RaceProgressScrubBarProps) {
   const { colors } = useTheme()
-  const [lapInfo, setLapInfo] = useState<OpenF1LapInfo | null>(null)
+  const { telemetryState, sessionKey, updateRaceProgress } = useTelemetry()
+  const { raceProgress } = telemetryState
+  const value = raceProgress.currentLap
+  
   const [events, setEvents] = useState<OpenF1Event[]>([])
   const [loading, setLoading] = useState(false)
   const [dragging, setDragging] = useState(false)
   const barRef = useRef<HTMLDivElement>(null)
   const thumbRef = useRef<HTMLDivElement>(null)
-  const totalLaps = lapInfo?.totalLaps || 100
+  const totalLaps = raceProgress.totalLaps || 100
   
   // Handle touch and mouse events for scrubbing
   const handleInteractionStart = (clientX: number) => {
@@ -43,6 +41,7 @@ export default function RaceProgressScrubBar({
     const percent = (clientX - rect.left) / rect.width
     const newLap = Math.max(1, Math.min(Math.round(percent * totalLaps), totalLaps))
     onChange(newLap)
+    updateRaceProgress({ currentLap: newLap })
   }
   
   const handleInteractionMove = (clientX: number) => {
@@ -52,6 +51,7 @@ export default function RaceProgressScrubBar({
     const percent = (clientX - rect.left) / rect.width
     const newLap = Math.max(1, Math.min(Math.round(percent * totalLaps), totalLaps))
     onChange(newLap)
+    updateRaceProgress({ currentLap: newLap })
   }
   
   const handleInteractionEnd = () => {
@@ -81,6 +81,8 @@ export default function RaceProgressScrubBar({
   
   // Get lap info and events from API
   useEffect(() => {
+    if (!sessionKey) return
+    
     setLoading(true)
     const openf1 = new OpenF1Service("https://api.openf1.org/v1")
     
@@ -89,16 +91,21 @@ export default function RaceProgressScrubBar({
       openf1.getEvents(sessionKey)
     ]).then(([lapInfoData, eventsData]) => {
       if (Array.isArray(lapInfoData) && lapInfoData.length) {
-        setLapInfo(lapInfoData[0])
+        const lapInfo = lapInfoData[0]
+        updateRaceProgress({
+          currentLap: lapInfo.currentLap || 1,
+          totalLaps: lapInfo.totalLaps || 1,
+          sectorTimes: lapInfo.sectorTimes || []
+        })
       }
       if (Array.isArray(eventsData)) {
         setEvents(eventsData)
       }
     }).catch(console.error)
     .finally(() => setLoading(false))
-  }, [sessionKey])
+  }, [sessionKey, updateRaceProgress])
   
-  if (!lapInfo) {
+  if (!raceProgress.totalLaps) {
     return (
       <Card className="animate-pulse">
         <CardContent>

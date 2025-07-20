@@ -1,6 +1,6 @@
 "use client"
 
-import { useEffect, useState, useRef } from "react"
+import { useEffect, useState, useRef, useCallback } from "react"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { motion, AnimatePresence } from "framer-motion"
 import { MapIcon, ZoomIn, ZoomOut } from "lucide-react"
@@ -9,20 +9,55 @@ import LapCounter from "@/components/LapCounter"
 import type { OpenF1DriverPosition, OpenF1TrackLayout, OpenF1SectorTiming, OpenF1LapInfo } from "@/lib/api/types"
 import { OpenF1Service } from "@/lib/api/openf1"
 import AnimatedButton from "@/components/AnimatedButton"
+import { useWebSocket } from "@/lib/hooks/useWebSocket"
+import { useTelemetryQueue } from "@/lib/hooks/useTelemetryQueue"
 
+// Types for driver positions with smoother animations
+type DriverPositionDisplay = {
+  driver_number: number
+  name: string
+  x: number
+  y: number
+  color: string
+}
+
+type SectorTimeDisplay = {
+  sector: number
+  time?: number
+  driver?: number
+  color: string
+}
+
+function sectorColor(performance: string) {
+  switch (performance) {
+    case "personal_best":
+      return "#9333ea" // Purple
+    case "session_best":
+      return "#22c55e" // Green
+    case "slow":
+      return "#ef4444" // Red
+    default:
+      return "#f59e0b" // Yellow (default)
+  }
+}
+
+// Fetch track data with all required info
 async function fetchTrackData(sessionKey: string) {
   const openf1 = new OpenF1Service("https://api.openf1.org/v1")
+
   const [positionsRes, sessionRes, sectorRes, lapRes] = await Promise.all([
     openf1.getDriverPositions(sessionKey),
     openf1.getSessionDetails(sessionKey),
     openf1.getSectorTimings(sessionKey),
     openf1.getLapInfo(sessionKey),
   ])
+
   const layout: OpenF1TrackLayout = sessionRes?.track_layout || {
     svgPath: "M40,160 Q60,40 150,40 Q240,40 260,160 Q150,180 40,160 Z",
     width: 300,
     height: 200,
   }
+
   const positions: OpenF1DriverPosition[] = (positionsRes || []).map((pos: any) => ({
     driver_number: pos.driver_number,
     name: pos.driver_name || pos.broadcast_name || `#${pos.driver_number}`,
@@ -30,42 +65,68 @@ async function fetchTrackData(sessionKey: string) {
     y: pos.normalized_track_position_y ?? 0,
     color: pos.color || pos.team_colour || "#8884d8",
   }))
+
   const sectorTimings: OpenF1SectorTiming[] = sectorRes || []
   const lapInfo: OpenF1LapInfo = lapRes || { currentLap: 1, totalLaps: 0, sectorTimes: [] }
   return { positions, layout, sectorTimings, lapInfo }
 }
 
-function sectorColor(performance: string) {
-  if (performance === "fastest") return "#22c55e"
-  if (performance === "personal_best") return "#fbbf24"
-  return "#ef4444"
-}
-
 export default function TrackMap({ sessionKey = "latest" }) {
   const { colors } = useTheme()
+
+  // Track state
   const [layout, setLayout] = useState({ svgPath: "M0,0" })
-  const [positions, setPositions] = useState<DriverPositionDisplay[]>([])
   const [sectorTimeDisplay, setSectorTimeDisplay] = useState<SectorTimeDisplay[]>([])
   const [lapInfo, setLapInfo] = useState<OpenF1LapInfo>({ currentLap: 1, totalLaps: 50 })
+
+  // UI state
   const [zoomLevel, setZoomLevel] = useState(1)
   const [panOffset, setPanOffset] = useState({ x: 0, y: 0 })
   const [isPanning, setIsPanning] = useState(false)
+
+  // Refs
   const svgRef = useRef<SVGSVGElement>(null)
   const lastPanPoint = useRef({ x: 0, y: 0 })
-  
+
+  // Use telemetry queue for driver positions to ensure smooth animations
+  const positionQueue = useTelemetryQueue<DriverPositionDisplay[]>({
+    throttleMs: 100,
+    debounceMs: 100,
+    processStrategy: "smooth",
+  })
+
+  // Real-time position updates via WebSocket
+  const wsEndpoint = sessionKey
+    ? `wss://api.openf1.org/v1/position_data/stream?session_key=${sessionKey}`
+    : null
+
+  const { status: wsStatus } = useWebSocket(wsEndpoint, {
+    onStatusChange: () => {},
+    queueOptions: {
+      throttleMs: 50,
+      processStrategy: "latest",
+    },
+  })
+
+  // Fetch track layout, sector times, and initial positions
   useEffect(() => {
     let mounted = true
+
     async function load() {
       try {
         const { positions, layout, sectorTimings, lapInfo } = await fetchTrackData(sessionKey)
+
         if (mounted) {
-          setPositions(positions)
           setLayout(layout)
+          positionQueue.enqueue(positions) // Initialize positions
+
+          // Process sector timing data
           setSectorTimeDisplay(
             [1, 2, 3].map((sectorNum) => {
               const best = sectorTimings
                 .filter((s) => s.sector === sectorNum)
                 .sort((a, b) => a.sector_time - b.sector_time)[0]
+
               return best
                 ? {
                     sector: sectorNum,
@@ -76,73 +137,88 @@ export default function TrackMap({ sessionKey = "latest" }) {
                 : null
             })
           )
+
           setLapInfo(lapInfo)
         }
       } catch {
         // Optionally handle error
       }
     }
+
     load()
-    const interval = setInterval(load, 1000)
+
+    // Poll for updated data every second if WebSocket isn't available
+    const interval = wsStatus !== "open" ? setInterval(load, 1000) : null
+
     return () => {
       mounted = false
-      clearInterval(interval)
+      if (interval) clearInterval(interval)
     }
-  }, [sessionKey])
+  }, [sessionKey, wsStatus])
 
   // Handle touch pan interactions
-  const handlePanStart = (clientX: number, clientY: number) => {
-    setIsPanning(true)
-    lastPanPoint.current = { x: clientX, y: clientY }
-  }
-  
-  const handlePanMove = (clientX: number, clientY: number) => {
-    if (!isPanning) return
-    
-    const dx = clientX - lastPanPoint.current.x
-    const dy = clientY - lastPanPoint.current.y
-    
-    setPanOffset(prev => ({
-      x: prev.x + dx / zoomLevel,
-      y: prev.y + dy / zoomLevel
-    }))
-    
-    lastPanPoint.current = { x: clientX, y: clientY }
-  }
-  
-  const handlePanEnd = () => {
+  const handlePanStart = useCallback(
+    (clientX: number, clientY: number) => {
+      setIsPanning(true)
+      lastPanPoint.current = { x: clientX, y: clientY }
+    },
+    []
+  )
+
+  const handlePanMove = useCallback(
+    (clientX: number, clientY: number) => {
+      if (!isPanning) return
+
+      const dx = clientX - lastPanPoint.current.x
+      const dy = clientY - lastPanPoint.current.y
+
+      setPanOffset((prev) => ({
+        x: prev.x + dx / zoomLevel,
+        y: prev.y + dy / zoomLevel,
+      }))
+
+      lastPanPoint.current = { x: clientX, y: clientY }
+    },
+    [isPanning, zoomLevel]
+  )
+
+  const handlePanEnd = useCallback(() => {
     setIsPanning(false)
-  }
-  
+  }, [])
+
   // Setup pan event listeners
   useEffect(() => {
     const handleMouseMove = (e: MouseEvent) => handlePanMove(e.clientX, e.clientY)
     const handleTouchMove = (e: TouchEvent) => {
       if (e.touches[0]) handlePanMove(e.touches[0].clientX, e.touches[0].clientY)
     }
-    
-    if (isPanning) {
-      window.addEventListener('mousemove', handleMouseMove)
-      window.addEventListener('touchmove', handleTouchMove, { passive: false })
-      window.addEventListener('mouseup', handlePanEnd)
-      window.addEventListener('touchend', handlePanEnd)
-    }
-    
-    return () => {
-      window.removeEventListener('mousemove', handleMouseMove)
-      window.removeEventListener('touchmove', handleTouchMove)
-      window.removeEventListener('mouseup', handlePanEnd)
-      window.removeEventListener('touchend', handlePanEnd)
-    }
-  }, [isPanning])
 
-  const handleZoomIn = () => setZoomLevel(prev => Math.min(prev * 1.2, 3))
-  const handleZoomOut = () => setZoomLevel(prev => Math.max(prev / 1.2, 0.5))
-  
+    if (isPanning) {
+      window.addEventListener("mousemove", handleMouseMove)
+      window.addEventListener("touchmove", handleTouchMove, { passive: false })
+      window.addEventListener("mouseup", handlePanEnd)
+      window.addEventListener("touchend", handlePanEnd)
+    }
+
+    return () => {
+      window.removeEventListener("mousemove", handleMouseMove)
+      window.removeEventListener("touchmove", handleTouchMove)
+      window.removeEventListener("mouseup", handlePanEnd)
+      window.removeEventListener("touchend", handlePanEnd)
+    }
+  }, [isPanning, handlePanMove, handlePanEnd])
+
+  // Zoom handlers
+  const handleZoomIn = useCallback(() => setZoomLevel((prev) => Math.min(prev * 1.2, 3)), [])
+  const handleZoomOut = useCallback(() => setZoomLevel((prev) => Math.max(prev / 1.2, 0.5)), [])
+
+  // Current positions from queue
+  const positions = positionQueue.data || []
+
   return (
     <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} transition={{ duration: 0.4, delay: 0.2 }}>
-      <Card 
-        className="w-full h-full card-transition card-hover" 
+      <Card
+        className="w-full h-full card-transition card-hover"
         style={{ borderColor: colors.primary, background: colors.primary + "10" }}
       >
         <CardHeader className="p-responsive-md">
@@ -153,9 +229,9 @@ export default function TrackMap({ sessionKey = "latest" }) {
               </motion.div>
               <span>Track Map</span>
             </CardTitle>
-            
+
             <div className="flex items-center gap-2">
-              <AnimatedButton 
+              <AnimatedButton
                 variant="ghost"
                 size="sm"
                 onClick={handleZoomIn}
@@ -175,7 +251,7 @@ export default function TrackMap({ sessionKey = "latest" }) {
               </AnimatedButton>
             </div>
           </div>
-          
+
           <div className="flex flex-col sm:flex-row items-start sm:items-center gap-responsive-sm mt-2">
             <LapCounter currentLap={lapInfo.currentLap} totalLaps={lapInfo.totalLaps} />
             <div className="flex flex-wrap gap-2">
@@ -197,22 +273,23 @@ export default function TrackMap({ sessionKey = "latest" }) {
             </div>
           </div>
         </CardHeader>
+
         <CardContent className="p-responsive-md">
-          <div 
+          <div
             className="flex justify-center items-center overflow-hidden touch-manipulation"
-            style={{ cursor: isPanning ? 'grabbing' : 'grab' }}
+            style={{ cursor: isPanning ? "grabbing" : "grab" }}
             onMouseDown={(e) => handlePanStart(e.clientX, e.clientY)}
             onTouchStart={(e) => {
               if (e.touches[0]) handlePanStart(e.touches[0].clientX, e.touches[0].clientY)
             }}
           >
-            <svg 
+            <svg
               ref={svgRef}
-              viewBox="0 0 300 200" 
+              viewBox="0 0 300 200"
               className="w-full max-w-full h-auto"
-              style={{ 
+              style={{
                 maxHeight: "50vh",
-                touchAction: 'none'
+                touchAction: "none",
               }}
             >
               <g transform={`scale(${zoomLevel}) translate(${panOffset.x} ${panOffset.y})`}>
@@ -229,7 +306,7 @@ export default function TrackMap({ sessionKey = "latest" }) {
                   animate={{ pathLength: 1 }}
                   transition={{ duration: 1.5, ease: "easeInOut" }}
                 />
-                
+
                 {/* Driver markers with Framer Motion animation */}
                 <AnimatePresence>
                   {positions.map((driver) => {
@@ -239,13 +316,16 @@ export default function TrackMap({ sessionKey = "latest" }) {
                       <motion.g
                         key={driver.driver_number}
                         initial={{ x: cx - 30, y: cy, opacity: 0 }}
-                        animate={{ x: cx, y: cy, opacity: 1 }}
-                        transition={{ 
-                          type: "spring", 
-                          stiffness: 120, 
-                          damping: 20,
-                          mass: 1
+                        animate={{
+                          x: cx,
+                          y: cy,
+                          opacity: 1,
+                          transition: {
+                            x: { type: "spring", stiffness: 100, damping: 20 },
+                            y: { type: "spring", stiffness: 100, damping: 20 },
+                          },
                         }}
+                        exit={{ opacity: 0, scale: 0 }}
                       >
                         <motion.circle
                           cx={0}
@@ -274,6 +354,27 @@ export default function TrackMap({ sessionKey = "latest" }) {
               </g>
             </svg>
           </div>
+
+          {/* Connection status indicator */}
+          {wsStatus && (
+            <div className="mt-2 flex justify-center">
+              <span
+                className={`text-xs ${
+                  wsStatus === "open"
+                    ? "text-green-500"
+                    : wsStatus === "connecting"
+                    ? "text-amber-500"
+                    : "text-red-500"
+                }`}
+              >
+                {wsStatus === "open"
+                  ? "Live Data"
+                  : wsStatus === "connecting"
+                  ? "Connecting..."
+                  : "Using Polling"}
+              </span>
+            </div>
+          )}
         </CardContent>
       </Card>
     </motion.div>

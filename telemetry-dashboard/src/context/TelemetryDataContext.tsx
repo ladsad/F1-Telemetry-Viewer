@@ -251,52 +251,75 @@ export function TelemetryProvider({ children, initialSessionKey }: { children: R
 
   // Method to update telemetry history with new data points
   const updateTelemetryHistory = useCallback((newData: TelemetryDataPoint[]) => {
+    if (!newData || newData.length === 0) return;
+    
     setTelemetryState(prev => {
-      // If history doesn't exist yet, create a new structure
-      if (!prev.telemetryHistory) {
+      try {
+        // If history doesn't exist yet, create a new structure
+        if (!prev.telemetryHistory) {
+          return {
+            ...prev,
+            telemetryHistory: createTimeSeriesStore(newData)
+          };
+        }
+        
+        // Otherwise, append new data efficiently
+        const currentHistory = prev.telemetryHistory;
+        const updatedData = [...currentHistory.indexedData];
+        const updatedTimestamps = [...currentHistory.sortedTimestamps];
+        const updatedMap = new Map(currentHistory.timestampMap);
+        
+        // Add new data points
+        newData.forEach((point, originalIndex) => {
+          const { timestamp } = point;
+          
+          // Only add if timestamp doesn't exist
+          if (!updatedMap.has(timestamp)) {
+            const newIndex = updatedData.length;
+            const completePoint: TelemetryDataPoint = {
+              speed: point.speed || 0,
+              throttle: point.throttle || 0,
+              brake: point.brake || 0,
+              gear: point.gear || 0,
+              rpm: point.rpm || 0,
+              drs: !!point.drs,
+              timestamp: timestamp,
+              lap: point.lap || 1,
+              sector: point.sector || 1,
+              distance: point.distance || 0,
+              index: newIndex
+            };
+            
+            updatedData.push(completePoint);
+            updatedTimestamps.push(timestamp);
+            updatedMap.set(timestamp, newIndex);
+          }
+        });
+        
+        // Resort timestamps if needed
+        if (newData.length > 0) {
+          updatedTimestamps.sort((a, b) => a - b);
+        }
+        
+        // Clear cache as data has changed
+        const updatedCache = new Map();
+        
         return {
           ...prev,
-          telemetryHistory: createTimeSeriesStore(newData)
+          telemetryHistory: {
+            indexedData: updatedData,
+            sortedTimestamps: updatedTimestamps,
+            timestampMap: updatedMap,
+            lapIndex: currentHistory.lapIndex || new Map(),
+            sectorIndex: currentHistory.sectorIndex || new Map(),
+            queryCache: updatedCache,
+            cacheSize: currentHistory.cacheSize
+          }
         };
+      } catch (error) {
+        console.error('Error updating telemetry history:', error);
+        return prev; // Return previous state if error occurs
       }
-      
-      // Otherwise, append new data efficiently
-      const currentHistory = prev.telemetryHistory;
-      const updatedData = [...currentHistory.indexedData];
-      const updatedTimestamps = [...currentHistory.sortedTimestamps];
-      const updatedMap = new Map(currentHistory.timestampMap);
-      
-      // Add new data points
-      newData.forEach(point => {
-        const { timestamp } = point;
-        
-        // Only add if timestamp doesn't exist
-        if (!updatedMap.has(timestamp)) {
-          const newIndex = updatedData.length;
-          updatedData.push(point);
-          updatedTimestamps.push(timestamp);
-          updatedMap.set(timestamp, newIndex);
-        }
-      });
-      
-      // Resort timestamps if needed
-      if (newData.length > 0) {
-        updatedTimestamps.sort((a, b) => a - b);
-      }
-      
-      // Clear cache as data has changed
-      const updatedCache = new Map();
-      
-      return {
-        ...prev,
-        telemetryHistory: {
-          indexedData: updatedData,
-          sortedTimestamps: updatedTimestamps,
-          timestampMap: updatedMap,
-          queryCache: updatedCache,
-          cacheSize: currentHistory.cacheSize
-        }
-      };
     });
   }, []);
   
@@ -331,21 +354,25 @@ export function TelemetryProvider({ children, initialSessionKey }: { children: R
     
     // Apply min/max value filters
     if (minValue !== undefined || maxValue !== undefined) {
-      if (sortBy) {
+      if (sortBy && sortBy in (filteredData[0] || {})) {
         filteredData = filteredData.filter(point => {
-          const value = point[sortBy];
-          return (minValue === undefined || value >= minValue) &&
+          const value = (point as any)[sortBy];
+          return typeof value === 'number' &&
+                 (minValue === undefined || value >= minValue) &&
                  (maxValue === undefined || value <= maxValue);
         });
       }
     }
     
     // Apply sort
-    if (sortBy) {
+    if (sortBy && sortBy in (filteredData[0] || {})) {
       filteredData.sort((a, b) => {
-        const aVal = a[sortBy];
-        const bVal = b[sortBy];
-        return sortDirection === 'desc' ? bVal - aVal : aVal - bVal;
+        const aVal = (a as any)[sortBy];
+        const bVal = (b as any)[sortBy];
+        if (typeof aVal === 'number' && typeof bVal === 'number') {
+          return sortDirection === 'desc' ? bVal - aVal : aVal - bVal;
+        }
+        return 0;
       });
     }
     
@@ -361,15 +388,16 @@ export function TelemetryProvider({ children, initialSessionKey }: { children: R
       result = filteredData.map(point => {
         const projected: Record<string, any> = {};
         fields.forEach(field => {
-          if (field in point) {
-            projected[field] = point[field];
+          const value = getPointValue(point, field);
+          if (value !== undefined) {
+            projected[field] = value;
           }
         });
         return projected as TelemetryDataPoint;
       });
     }
     
-    const queryResult = { 
+    const queryResult: QueryResult<TelemetryDataPoint> = { 
       data: result, 
       total, 
       queryTime: performance.now() - startTime 
@@ -393,23 +421,41 @@ export function TelemetryProvider({ children, initialSessionKey }: { children: R
     const sortedData = [...data].sort((a, b) => a.timestamp - b.timestamp);
 
     // Create indexed array for direct access by index
-    const indexedData = sortedData.map(item => ({
+    const indexedData = sortedData.map((item, index) => ({
       speed: item.speed || 0,
       throttle: item.throttle || 0,
       brake: item.brake || 0,
       gear: item.gear || 0,
       rpm: item.rpm || 0,
       drs: !!item.drs,
-      timestamp: item.timestamp
+      timestamp: item.timestamp,
+      lap: item.lap || 1, // Add missing lap property
+      sector: item.sector || 1, // Add missing sector property
+      distance: item.distance || 0, // Add missing distance property
+      index: index // Add missing index property
     }));
 
     // Create timestamp index for quick lookup
     const sortedTimestamps: number[] = [];
     const timestampMap = new Map<number, number>();
+    const lapIndex = new Map<number, number[]>(); // Add missing lap index
+    const sectorIndex = new Map<number, number[]>(); // Add missing sector index
 
     indexedData.forEach((item, index) => {
       sortedTimestamps.push(item.timestamp);
       timestampMap.set(item.timestamp, index);
+      
+      // Build lap index
+      if (!lapIndex.has(item.lap)) {
+        lapIndex.set(item.lap, []);
+      }
+      lapIndex.get(item.lap)!.push(index);
+      
+      // Build sector index
+      if (!sectorIndex.has(item.sector)) {
+        sectorIndex.set(item.sector, []);
+      }
+      sectorIndex.get(item.sector)!.push(index);
     });
 
     // Create LRU cache for recent queries
@@ -420,13 +466,15 @@ export function TelemetryProvider({ children, initialSessionKey }: { children: R
       indexedData,
       sortedTimestamps,
       timestampMap,
+      lapIndex, // Add missing property
+      sectorIndex, // Add missing property
       queryCache,
       cacheSize: CACHE_SIZE
     };
   }
   
   // Update the value object to include the full connection status
-  const value = {
+  const value: TelemetryContextType = {
     telemetryState,
     updateTelemetryState,
     updateCarData,
@@ -435,9 +483,9 @@ export function TelemetryProvider({ children, initialSessionKey }: { children: R
     updateRaceProgress,
     updateDriverStatus,
     connectionStatus: {
-      telemetry: telemetryStatus,
-      positions: positionsStatus,
-      timing: connectionStatus.timing // Use the state value for timing
+      telemetry: telemetryStatus || 'closed',
+      positions: positionsStatus || 'closed',
+      timing: connectionStatus.timing
     },
     setSessionKey,
     selectedDriverNumber,
@@ -461,3 +509,16 @@ export function useTelemetry(): TelemetryContextType {
   }
   return context;
 }
+
+// Add this helper function before the queryTelemetryHistory function:
+const getPointValue = (point: TelemetryDataPoint, key: string): any => {
+  const validKeys: (keyof TelemetryDataPoint)[] = [
+    'speed', 'throttle', 'brake', 'gear', 'rpm', 'drs', 
+    'timestamp', 'lap', 'sector', 'distance', 'index'
+  ];
+  
+  if (validKeys.includes(key as keyof TelemetryDataPoint)) {
+    return point[key as keyof TelemetryDataPoint];
+  }
+  return undefined;
+};

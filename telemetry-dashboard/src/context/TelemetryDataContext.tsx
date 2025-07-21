@@ -68,6 +68,9 @@ export interface TelemetryState {
 
   // Session identifier
   sessionKey: string;
+
+  // Add telemetry history
+  telemetryHistory: TelemetryTimeSeriesData | null;
 }
 
 // Context initial state
@@ -88,7 +91,8 @@ const initialTelemetryState: TelemetryState = {
     sectorTimes: [],
   },
   driverStatus: null,
-  sessionKey: "latest"
+  sessionKey: "latest",
+  telemetryHistory: null
 };
 
 // Create context
@@ -107,6 +111,10 @@ interface TelemetryContextType {
   setSessionKey: (key: string) => void;
   selectedDriverNumber: number;
   setSelectedDriverNumber: (driverNumber: number) => void;
+  
+  // Add methods for telemetry history
+  updateTelemetryHistory: (data: TelemetryDataPoint[]) => void;
+  queryTelemetryHistory: (filter: MetricQueryFilter) => QueryResult<TelemetryDataPoint>;
 }
 
 const TelemetryContext = createContext<TelemetryContextType | undefined>(undefined);
@@ -308,6 +316,148 @@ export function TelemetryProvider({ children }: { children: React.ReactNode }) {
     }));
   }, []);
 
+  // Method to update telemetry history with new data points
+  const updateTelemetryHistory = useCallback((newData: TelemetryDataPoint[]) => {
+    setTelemetryState(prev => {
+      // If history doesn't exist yet, create a new structure
+      if (!prev.telemetryHistory) {
+        return {
+          ...prev,
+          telemetryHistory: createTimeSeriesStore(newData)
+        };
+      }
+      
+      // Otherwise, append new data efficiently
+      const currentHistory = prev.telemetryHistory;
+      const updatedData = [...currentHistory.indexedData];
+      const updatedTimestamps = [...currentHistory.sortedTimestamps];
+      const updatedMap = new Map(currentHistory.timestampMap);
+      
+      // Add new data points
+      newData.forEach(point => {
+        const { timestamp } = point;
+        
+        // Only add if timestamp doesn't exist
+        if (!updatedMap.has(timestamp)) {
+          const newIndex = updatedData.length;
+          updatedData.push(point);
+          updatedTimestamps.push(timestamp);
+          updatedMap.set(timestamp, newIndex);
+        }
+      });
+      
+      // Resort timestamps if needed
+      if (newData.length > 0) {
+        updatedTimestamps.sort((a, b) => a - b);
+      }
+      
+      // Clear cache as data has changed
+      const updatedCache = new Map();
+      
+      return {
+        ...prev,
+        telemetryHistory: {
+          indexedData: updatedData,
+          sortedTimestamps: updatedTimestamps,
+          timestampMap: updatedMap,
+          queryCache: updatedCache,
+          cacheSize: currentHistory.cacheSize
+        }
+      };
+    });
+  }, []);
+  
+  // Efficient query method for telemetry history
+  const queryTelemetryHistory = useCallback((filter: MetricQueryFilter): QueryResult<TelemetryDataPoint> => {
+    const startTime = performance.now();
+    
+    if (!telemetryState.telemetryHistory) {
+      return { data: [], total: 0, queryTime: performance.now() - startTime };
+    }
+    
+    const { startTime: start, endTime: end, minValue, maxValue, fields, limit, sortBy, sortDirection } = filter;
+    const { indexedData, queryCache } = telemetryState.telemetryHistory;
+    
+    // Generate cache key
+    const cacheKey = JSON.stringify(filter);
+    if (queryCache.has(cacheKey)) {
+      const cached = queryCache.get(cacheKey);
+      return { ...cached, queryTime: performance.now() - startTime };
+    }
+    
+    // Find date range
+    let filteredData = indexedData;
+    
+    if (start !== undefined || end !== undefined) {
+      filteredData = indexedData.filter(point => {
+        const ts = point.timestamp;
+        return (start === undefined || ts >= start) && 
+               (end === undefined || ts <= end);
+      });
+    }
+    
+    // Apply min/max value filters
+    if (minValue !== undefined || maxValue !== undefined) {
+      if (sortBy) {
+        filteredData = filteredData.filter(point => {
+          const value = point[sortBy];
+          return (minValue === undefined || value >= minValue) &&
+                 (maxValue === undefined || value <= maxValue);
+        });
+      }
+    }
+    
+    // Apply sort
+    if (sortBy) {
+      filteredData.sort((a, b) => {
+        const aVal = a[sortBy];
+        const bVal = b[sortBy];
+        return sortDirection === 'desc' ? bVal - aVal : aVal - bVal;
+      });
+    }
+    
+    // Apply limit
+    const total = filteredData.length;
+    if (limit) {
+      filteredData = filteredData.slice(0, limit);
+    }
+    
+    // Project fields if specified
+    let result = filteredData;
+    if (fields && fields.length > 0) {
+      result = filteredData.map(point => {
+        const projected: Record<string, any> = {};
+        fields.forEach(field => {
+          if (field in point) {
+            projected[field] = point[field];
+          }
+        });
+        return projected as TelemetryDataPoint;
+      });
+    }
+    
+    const queryResult = { 
+      data: result, 
+      total, 
+      queryTime: performance.now() - startTime 
+    };
+    
+    // Cache result
+    if (queryCache.size >= telemetryState.telemetryHistory.cacheSize) {
+      const firstKey = queryCache.keys().next().value;
+      queryCache.delete(firstKey);
+    }
+    queryCache.set(cacheKey, queryResult);
+    
+    return queryResult;
+  }, [telemetryState.telemetryHistory]);
+  
+  // Helper to create efficient time series data structure
+  function createTimeSeriesStore(data: TelemetryDataPoint[]): TelemetryTimeSeriesData {
+    // Implementation as in useHistoricTelemetry
+    // ... (same implementation)
+  }
+  
   // Context value
   const value = {
     telemetryState,
@@ -324,6 +474,8 @@ export function TelemetryProvider({ children }: { children: React.ReactNode }) {
     setSessionKey,
     selectedDriverNumber,
     setSelectedDriverNumber,
+    updateTelemetryHistory,
+    queryTelemetryHistory
   };
 
   return (

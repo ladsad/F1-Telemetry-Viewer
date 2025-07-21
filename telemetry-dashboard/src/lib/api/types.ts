@@ -181,3 +181,63 @@ export type AnalyticsFilter = {
   metric: string
   // Add more filter fields as needed (lap range, stint, weather, etc.)
 }
+
+// Telemetry data point structure for optimal storage and query
+export interface TelemetryDataPoint {
+  speed: number;
+  throttle: number;
+  brake: number;
+  gear: number;
+  rpm: number;
+  drs: boolean;
+  timestamp: number;
+  [key: string]: any; // Allow additional fields
+}
+
+// Efficient data structure for time series telemetry data
+export interface TelemetryTimeSeriesData {
+  // Direct access by index (sparse array)
+  indexedData: TelemetryDataPoint[];
+  
+  // Index for timestamp-based lookups
+  sortedTimestamps: number[];
+  timestampMap: Map<number, number>; // timestamp -> index
+  
+  // Cache for recent queries
+  queryCache: Map<string, any>;
+  cacheSize: number;
+  
+  // Optional: Specialized indexes for range queries
+  // rangeIndex?: any;
+}
+
+// Statistics derived from telemetry data
+export interface TelemetryStatistics {
+  maxSpeed: number;
+  minSpeed: number;
+  avgSpeed: number;
+  maxThrottle: number;
+  maxBrake: number;
+  maxRpm: number;
+  drsActivations: number;
+  totalTime: number; // seconds
+}
+
+// Query result interface
+export interface QueryResult<T> {
+  data: T[];
+  total: number;
+  queryTime: number; // milliseconds
+}
+
+// Metric query filter options
+export interface MetricQueryFilter {
+  startTime?: number;
+  endTime?: number;
+  minValue?: number;
+  maxValue?: number;
+  fields?: string[];
+  limit?: number;
+  sortBy?: string;
+  sortDirection?: 'asc' | 'desc';
+}

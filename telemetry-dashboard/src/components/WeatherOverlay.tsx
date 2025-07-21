@@ -27,7 +27,9 @@ const WeatherMetric = React.memo(({ icon, value, unit, label }: WeatherMetricPro
     className="flex items-center gap-2"
     whileHover={{ scale: 1.05 }}
   >
-    {React.cloneElement(icon, { className: "flex-shrink-0" })}
+    <div className="flex-shrink-0">
+      {icon}
+    </div>
     <div className="flex flex-col">
       <span className="font-semibold">{value}{unit}</span>
       <span className="text-xs uppercase tracking-wider text-muted-foreground">{label}</span>
@@ -35,15 +37,29 @@ const WeatherMetric = React.memo(({ icon, value, unit, label }: WeatherMetricPro
   </motion.div>
 ));
 
-export function React.memo(WeatherOverlay({ 
+// Define a fallback weather object to handle null or undefined values
+const DEFAULT_WEATHER: WeatherData = {
+  air_temperature: 0,
+  track_temperature: 0,
+  humidity: 0,
+  pressure: 0,
+  wind_speed: 0,
+  wind_direction: "N/A",
+  rainfall: 0
+};
+
+function WeatherOverlay({ 
   weatherData, 
   showForecast = false, 
   showImpact = true,
   refreshInterval = 10000 
 }: WeatherOverlayProps = {}) {
   const { colors } = useTheme();
-  const { telemetryState, updateWeather, sessionKey, connectionStatus } = useTelemetry();
-  const { weather } = telemetryState;
+  const { telemetryState, updateWeather, connectionStatus } = useTelemetry();
+  
+  // Safely access weather data with default fallback
+  const weather = telemetryState.weather || DEFAULT_WEATHER;
+  const sessionKey = telemetryState.sessionKey;
   
   // Memoize fetch function
   const fetchWeather = useCallback(async () => {
@@ -65,24 +81,24 @@ export function React.memo(WeatherOverlay({
   useEffect(() => {
     if (!sessionKey) return;
     
-    let mounted = true;
-    
     fetchWeather();
     const interval = setInterval(fetchWeather, refreshInterval);
     
     return () => {
-      mounted = false;
       clearInterval(interval);
     };
   }, [fetchWeather, sessionKey, refreshInterval]);
 
   // Calculate weather impact (memoized to avoid recalculation)
   const impact = useMemo(() => {
-    if (!weather) return null;
+    // Safely handle optional values with nullish coalescing
+    const rainfall = weather?.rainfall ?? 0;
+    const trackTemp = weather?.track_temperature ?? 30;
+    const windSpeed = weather?.wind_speed ?? 0;
     
-    const rainImpact = weather.rainfall > 0 ? weather.rainfall * 0.8 : 0;
-    const tempImpact = Math.abs(weather.track_temperature - 35) * 0.05;
-    const windImpact = weather.wind_speed > 15 ? (weather.wind_speed - 15) * 0.1 : 0;
+    const rainImpact = rainfall > 0 ? rainfall * 0.8 : 0;
+    const tempImpact = Math.abs(trackTemp - 35) * 0.05;
+    const windImpact = windSpeed > 15 ? (windSpeed - 15) * 0.1 : 0;
     
     const totalImpact = rainImpact + tempImpact + windImpact;
     const avgLapImpact = totalImpact / 3; // Simple average for demo
@@ -96,7 +112,8 @@ export function React.memo(WeatherOverlay({
     };
   }, [weather]);
 
-  if (!weather) {
+  // Loading state when no weather data
+  if (!telemetryState.weather) {
     return (
       <Card 
         className="w-full h-full card-transition card-hover" 
@@ -106,7 +123,7 @@ export function React.memo(WeatherOverlay({
           <CardTitle className="flex items-center gap-2">
             <CloudRain className="w-5 h-5" />
             <span>Weather Conditions</span>
-            <ConnectionStatusIndicator size="sm" showLabel={false} />
+            <ConnectionStatusIndicator service="telemetry" size="sm" showLabel={false} />
           </CardTitle>
         </CardHeader>
         <CardContent className="flex flex-col items-center justify-center p-8">
@@ -148,7 +165,7 @@ export function React.memo(WeatherOverlay({
               <CloudRain className="w-5 h-5" />
             </motion.div>
             <span>Weather Conditions</span>
-            <ConnectionStatusIndicator size="sm" showLabel={false} />
+            <ConnectionStatusIndicator service="telemetry" size="sm" showLabel={false} />
           </CardTitle>
         </CardHeader>
         <CardContent>
@@ -163,27 +180,27 @@ export function React.memo(WeatherOverlay({
             
             <WeatherMetric 
               icon={<Thermometer className="text-orange-500" />}
-              value={weather.air_temperature}
+              value={weather.air_temperature ?? 0}
               unit="°C"
               label="Air"
             />
             
             <WeatherMetric 
               icon={<Thermometer className="text-yellow-500" />}
-              value={weather.track_temperature}
+              value={weather.track_temperature ?? 0}
               unit="°C"
               label="Track"
             />
             
             <WeatherMetric 
               icon={<Wind className="text-cyan-500" />}
-              value={weather.wind_speed}
+              value={weather.wind_speed ?? 0}
               unit=" km/h"
-              label={weather.wind_direction}
+              label={weather.wind_direction ?? "N/A"}
             />
           </div>
           
-          {showImpact && (
+          {showImpact && impact && (
             <motion.div
               initial={{ opacity: 0, y: 10 }}
               animate={{ opacity: 1, y: 0 }}
@@ -202,10 +219,12 @@ export function React.memo(WeatherOverlay({
             animate={{ opacity: 1 }}
             transition={{ delay: 0.5 }}
           >
-            <WeatherTrendChart />
+            <WeatherTrendChart sessionKey={sessionKey} />
           </motion.div>
         )}
       </Card>
     </motion.div>
   );
-});
+}
+
+export default React.memo(WeatherOverlay);

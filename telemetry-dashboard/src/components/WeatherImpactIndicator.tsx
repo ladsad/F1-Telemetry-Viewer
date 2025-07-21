@@ -1,47 +1,83 @@
-import { CloudRain, Thermometer, Wind } from "lucide-react"
-import type { OpenF1WeatherData, WeatherImpactEstimate } from "@/lib/api/types"
+"use client"
 
-type WeatherImpactIndicatorProps = {
-  weather: OpenF1WeatherData | null
-  impact: WeatherImpactEstimate | null
-}
+import React from "react"
+import { Card, CardContent } from "@/components/ui/card"
+import { Progress } from "@/components/ui/progress"
+import { WeatherData } from "@/types"
 
-export default function WeatherImpactIndicator({ weather, impact }: WeatherImpactIndicatorProps) {
-  if (!weather || !impact) return null
+// Change the prop name from weatherData to weather
+export default function WeatherImpactIndicator({
+  weather,
+  impact,
+}: {
+  weather: WeatherData
+  impact: {
+    rain: { timeLoss: number }
+    temp: { timeLoss: number }
+    wind: { timeLoss: number }
+    total: number
+    avgLap: number
+  }
+}) {
+  // Impact calculation is already done in the parent, we just display it here
 
   return (
-    <div className="flex flex-col gap-1 mt-2">
-      <div className="flex items-center gap-2 text-xs">
-        <CloudRain className="w-4 h-4 text-blue-500" />
-        Rain Impact:{" "}
-        <span className={impact.rain.timeLoss > 0 ? "text-red-500" : "text-green-500"}>
-          {impact.rain.timeLoss > 0 ? "+" : ""}
-          {impact.rain.timeLoss.toFixed(2)}s/lap
-        </span>
-      </div>
-      <div className="flex items-center gap-2 text-xs">
-        <Thermometer className="w-4 h-4 text-orange-500" />
-        Temp Impact:{" "}
-        <span className={impact.temp.timeLoss > 0 ? "text-red-500" : "text-green-500"}>
-          {impact.temp.timeLoss > 0 ? "+" : ""}
-          {impact.temp.timeLoss.toFixed(2)}s/lap
-        </span>
-      </div>
-      <div className="flex items-center gap-2 text-xs">
-        <Wind className="w-4 h-4 text-cyan-500" />
-        Wind Impact:{" "}
-        <span className={impact.wind.timeLoss > 0 ? "text-red-500" : "text-green-500"}>
-          {impact.wind.timeLoss > 0 ? "+" : ""}
-          {impact.wind.timeLoss.toFixed(2)}s/lap
-        </span>
-      </div>
-      <div className="text-xs text-muted-foreground mt-1">
-        <span className="font-semibold">Est. Total Impact: </span>
-        <span className={impact.total > 0 ? "text-red-500" : "text-green-500"}>
-          {impact.total > 0 ? "+" : ""}
-          {impact.total.toFixed(2)}s/lap
-        </span>
-      </div>
-    </div>
+    <Card className="bg-muted/30">
+      <CardContent className="pt-4">
+        <h3 className="text-sm font-semibold mb-2">Weather Impact Analysis</h3>
+
+        <div className="space-y-4">
+          <div>
+            <div className="flex justify-between items-center mb-1">
+              <span className="text-xs">Rainfall Impact</span>
+              <span className="text-xs font-semibold">
+                +{impact.rain.timeLoss.toFixed(2)}s
+              </span>
+            </div>
+            <Progress
+              value={Math.min(impact.rain.timeLoss * 10, 100)}
+              className="h-1"
+            />
+          </div>
+
+          <div>
+            <div className="flex justify-between items-center mb-1">
+              <span className="text-xs">Temperature Impact</span>
+              <span className="text-xs font-semibold">
+                +{impact.temp.timeLoss.toFixed(2)}s
+              </span>
+            </div>
+            <Progress
+              value={Math.min(impact.temp.timeLoss * 10, 100)}
+              className="h-1"
+            />
+          </div>
+
+          <div>
+            <div className="flex justify-between items-center mb-1">
+              <span className="text-xs">Wind Impact</span>
+              <span className="text-xs font-semibold">
+                +{impact.wind.timeLoss.toFixed(2)}s
+              </span>
+            </div>
+            <Progress
+              value={Math.min(impact.wind.timeLoss * 10, 100)}
+              className="h-1"
+            />
+          </div>
+
+          <div className="pt-2 border-t">
+            <div className="flex justify-between items-center mb-1">
+              <span className="text-xs font-semibold">
+                Estimated Lap Time Impact
+              </span>
+              <span className="text-sm font-bold">
+                +{impact.avgLap.toFixed(2)}s
+              </span>
+            </div>
+          </div>
+        </div>
+      </CardContent>
+    </Card>
   )
 }

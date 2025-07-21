@@ -33,10 +33,45 @@ export default function SessionComparison({
   selectedSessions = [], 
   metricType = 'lap_time' 
 }: SessionComparisonProps) {
-  const [selected, setSelected] = useState<Session[]>(selectedSessions)
+  const [selected, setSelected] = useState<Session[]>([])
   const [telemetry, setTelemetry] = useState<Record<string, Telemetry[]>>({})
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
+
+  // Load initial sessions from selectedSessions prop
+  useEffect(() => {
+    if (selectedSessions.length === 0) return
+    
+    setLoading(true)
+    const openf1 = new OpenF1Service("https://api.openf1.org/v1")
+    
+    Promise.all(
+      selectedSessions.map(sessionKey => 
+        openf1.getSessionDetails(sessionKey)
+      )
+    ).then(sessions => {
+      // Filter out any null/undefined sessions and convert to proper Session objects
+      const validSessions = sessions
+        .filter((session): session is SessionInfo => session != null)
+        .map(session => ({
+          session_key: session.session_key,
+          session_name: session.session_name || 'Unknown Session',
+          session_type: session.session_type || 'Unknown',
+          date_start: session.date_start || '',
+          circuit_short_name: session.circuit_short_name,
+          country_name: session.country_name,
+          season: session.season || new Date().getFullYear(),
+          round_number: session.round_number || 0
+        }))
+      
+      setSelected(validSessions)
+    }).catch(err => {
+      console.error('Error loading initial sessions:', err)
+      setError('Failed to load initial sessions')
+    }).finally(() => {
+      setLoading(false)
+    })
+  }, [selectedSessions])
 
   // Add a session to compare
   const handleAddSession = (session: Session) => {

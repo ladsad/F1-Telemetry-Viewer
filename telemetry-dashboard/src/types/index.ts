@@ -25,8 +25,6 @@ import type {
   OpenF1DeltaTime,
   AnalyticsMetric,
   AnalyticsFilter,
-  TelemetryDataPoint,
-  TelemetryTimeSeriesData,
   TelemetryStatistics,
   QueryResult,
   MetricQueryFilter
@@ -53,8 +51,6 @@ export {
   OpenF1DeltaTime,
   AnalyticsMetric,
   AnalyticsFilter,
-  TelemetryDataPoint,
-  TelemetryTimeSeriesData,
   TelemetryStatistics,
   QueryResult,
   MetricQueryFilter
@@ -524,4 +520,34 @@ export interface WeatherImpactProps {
     total: number;
     avgLap: number;
   };
+}
+
+/**
+ * Telemetry data point for historic data playback and analysis
+ */
+export interface TelemetryDataPoint {
+  speed: number;
+  throttle: number;
+  brake: number;
+  gear: number;
+  rpm: number;
+  drs: boolean;
+  timestamp: number;
+  lap: number;
+  sector: number;
+  distance: number;
+  index: number;
+}
+
+/**
+ * Time series data structure for efficient telemetry querying
+ */
+export interface TelemetryTimeSeriesData {
+  indexedData: TelemetryDataPoint[];
+  sortedTimestamps: number[];
+  timestampMap: Map<number, number>;
+  lapIndex: Map<number, number[]>;
+  sectorIndex: Map<number, number[]>;
+  queryCache: Map<string, any>;
+  cacheSize: number;
 }

@@ -11,6 +11,7 @@ import { useWebSocket } from "@/lib/hooks/useWebSocket";
 import { useTelemetry } from "@/context/TelemetryDataContext";
 import { TelemetryDisplayProps, TelemetryData } from "@/types";
 import ConnectionStatusIndicator from "@/components/ConnectionStatusIndicator";
+import { OpenF1Service } from "@/lib/api/openf1"; // Add this import
 
 const TELEMETRY_CACHE_KEY = "telemetry_last_data";
 
@@ -119,24 +120,31 @@ export default React.memo(function TelemetryDisplay(props: TelemetryDisplayProps
 
   // Fallback: Poll REST API if no WebSocket or on error
   useEffect(() => {
-    // Only poll if connection is not open
-    if (connectionStatus.telemetry === "open") return;
+    if (!props.fallbackApiUrl || connectionStatus.telemetry === "open") return;
 
     let mounted = true;
-    let interval: NodeJS.Timeout | undefined = undefined;
-    const intervalMs = 1000; // Default refresh interval
+    let interval: NodeJS.Timeout;
+    const intervalMs = 1000; // Use constant default
 
     const poll = async () => {
-      // Since we don't have a fallback API URL from props, 
-      // we'll rely on the context to handle data fetching
-      // This useEffect can be simplified or removed
+      try {
+        const openf1 = new OpenF1Service("https://api.openf1.org/v1");
+        const latest = await openf1.getCarTelemetry("latest", undefined, 1); // Get latest data for driver 1
+        
+        if (mounted && Array.isArray(latest) && latest.length > 0) {
+          updateCarData(latest[0]);
+        }
+      } catch (error) {
+        console.error('Error fetching telemetry:', error);
+      }
     };
     
-    // Only set up polling if we have a way to fetch data
-    // For now, we'll just return since no fallbackApiUrl is provided
+    poll();
+    interval = setInterval(poll, intervalMs);
+    
     return () => {
       mounted = false;
-      if (interval) clearInterval(interval);
+      clearInterval(interval);
     };
   }, [connectionStatus.telemetry, updateCarData]);
 

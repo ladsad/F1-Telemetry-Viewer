@@ -129,38 +129,126 @@ export class OpenF1Service {
 
     // --- OpenF1 API Endpoints ---
 
-    async getCarTelemetry(sessionKey: string, lapNumber?: number) {
-        let endpoint = `/car_data?session_key=${sessionKey}`
+    async getCarTelemetry(sessionKey: string, lapNumber?: number, driverNumber?: number) {
+        let endpoint = `/v1/car_data?session_key=${sessionKey}`
         if (lapNumber !== undefined) endpoint += `&lap_number=${lapNumber}`
-        return this.request(endpoint)
+        if (driverNumber !== undefined) endpoint += `&driver_number=${driverNumber}`
+        
+        try {
+            const data = await this.request(endpoint)
+            // Transform OpenF1 response to match our TelemetryData interface
+            return Array.isArray(data) ? data.map(item => ({
+                speed: item.speed || 0,
+                throttle: item.throttle || 0,
+                brake: item.brake || 0,
+                gear: item.n_gear || 0,
+                rpm: item.rpm || 0,
+                drs: item.drs === 1 || item.drs === true,
+                timestamp: new Date(item.date).getTime(),
+                session_key: item.session_key,
+                driver_number: item.driver_number,
+                lap_number: item.lap_number
+            })) : []
+        } catch (error) {
+            console.error('Error fetching car telemetry:', error)
+            return []
+        }
     }
 
     // Fetch lap info (current lap, total laps, sector times)
     async getLapInfo(sessionKey: string) {
-        return this.request(`/lap_info?session_key=${sessionKey}`)
+        try {
+            // OpenF1 doesn't have a direct lap_info endpoint, so we construct it from laps
+            const laps = await this.request(`/v1/laps?session_key=${sessionKey}`)
+            if (!Array.isArray(laps) || laps.length === 0) {
+                return { currentLap: 1, totalLaps: 0, sectorTimes: [] }
+            }
+            
+            const maxLap = Math.max(...laps.map(lap => lap.lap_number || 0))
+            const currentLap = maxLap || 1
+            
+            // Get sector times from intervals
+            const intervals = await this.request(`/v1/intervals?session_key=${sessionKey}`)
+            const sectorTimes = Array.isArray(intervals) ? intervals.map(interval => ({
+                sector: 1, // OpenF1 intervals don't specify sectors
+                time: interval.gap_to_leader || 0,
+                driver_number: interval.driver_number
+            })) : []
+            
+            return {
+                currentLap,
+                totalLaps: maxLap,
+                sectorTimes
+            }
+        } catch (error) {
+            console.error('Error fetching lap info:', error)
+            return { currentLap: 1, totalLaps: 0, sectorTimes: [] }
+        }
     }
 
     async getWeather(sessionKey: string) {
-        return this.request(`/weather_data?session_key=${sessionKey}`)
+        try {
+            const data = await this.request(`/v1/weather?session_key=${sessionKey}`)
+            return Array.isArray(data) ? data.map(item => ({
+                session_key: item.session_key,
+                date: item.date,
+                air_temperature: item.air_temperature || 20,
+                track_temperature: item.track_temperature || 25,
+                humidity: item.humidity || 50,
+                pressure: item.pressure || 1013,
+                wind_speed: item.wind_speed || 0,
+                wind_direction: item.wind_direction || 'N',
+                rainfall: item.rainfall || 0
+            })) : []
+        } catch (error) {
+            console.error('Error fetching weather:', error)
+            return []
+        }
     }
 
     async getDriverPositions(sessionKey: string, lapNumber?: number) {
-        let endpoint = `/position_data?session_key=${sessionKey}`
-        if (lapNumber !== undefined) endpoint += `&lap_number=${lapNumber}`
-        return this.request(endpoint)
+        try {
+            let endpoint = `/v1/position?session_key=${sessionKey}`
+            if (lapNumber !== undefined) endpoint += `&lap_number=${lapNumber}`
+            
+            const data = await this.request(endpoint)
+            return Array.isArray(data) ? data.map(pos => ({
+                driver_number: pos.driver_number,
+                name: pos.driver_name || `#${pos.driver_number}`,
+                x: pos.x || 0,
+                y: pos.y || 0,
+                color: pos.team_colour || '#8884d8',
+                position: pos.position || 0
+            })) : []
+        } catch (error) {
+            console.error('Error fetching driver positions:', error)
+            return []
+        }
     }
 
     async getSessions(season?: number, round?: number) {
-        let endpoint = `/sessions`
+        let endpoint = `/v1/sessions`
         const params = []
-        if (season !== undefined) params.push(`season=${season}`)
+        if (season !== undefined) params.push(`year=${season}`)
         if (round !== undefined) params.push(`round=${round}`)
         if (params.length) endpoint += `?${params.join("&")}`
-        return this.request(endpoint)
+        
+        try {
+            return await this.request(endpoint)
+        } catch (error) {
+            console.error('Error fetching sessions:', error)
+            return []
+        }
     }
     
     async getSessionDetails(sessionKey: string) {
-        return this.request(`/sessions/${sessionKey}`)
+        try {
+            const sessions = await this.request(`/v1/sessions?session_key=${sessionKey}`)
+            return Array.isArray(sessions) ? sessions[0] : sessions
+        } catch (error) {
+            console.error('Error fetching session details:', error)
+            return null
+        }
     }
 
     async getMultipleSessionsTelemetry(sessionKeys: string[]): Promise<Record<string, any[]>> {
@@ -180,16 +268,25 @@ export class OpenF1Service {
     async getCalendar(season: number) {
         return this.request(`/sessions?season=${season}`)
     }
-
-    async getTrackLayout(sessionKey: string) {
-        return this.request(`/track_layout?session_key=${sessionKey}`)
-    }
-
+    
     // Fetch sector timing data for a session (optionally for a driver)
     async getSectorTimings(sessionKey: string, driverNumber?: number) {
-        let endpoint = `/sector_times?session_key=${sessionKey}`
-        if (driverNumber !== undefined) endpoint += `&driver_number=${driverNumber}`
-        return this.request(endpoint)
+        try {
+            let endpoint = `/v1/intervals?session_key=${sessionKey}`
+            if (driverNumber !== undefined) endpoint += `&driver_number=${driverNumber}`
+            
+            const data = await this.request(endpoint)
+            // Transform intervals to sector timings (OpenF1 doesn't have direct sector endpoints)
+            return Array.isArray(data) ? data.map(interval => ({
+                driver_number: interval.driver_number,
+                sector: 1,
+                sector_time: interval.gap_to_leader || 0,
+                performance: 'normal'
+            })) : []
+        } catch (error) {
+            console.error('Error fetching sector timings:', error)
+            return []
+        }
     }
 
     // Fetch hourly weather data (if available)
@@ -207,7 +304,33 @@ export class OpenF1Service {
         sessionKey: string,
         driverNumber: number
     ) {
-        return this.request(`/driver_status?session_key=${sessionKey}&driver_number=${driverNumber}`)
+        try {
+            // Combine data from multiple endpoints for driver status
+            const [carData, stints] = await Promise.all([
+                this.request(`/v1/car_data?session_key=${sessionKey}&driver_number=${driverNumber}`),
+                this.request(`/v1/stints?session_key=${sessionKey}&driver_number=${driverNumber}`)
+            ])
+            
+            const latestCar = Array.isArray(carData) && carData.length > 0 
+                ? carData[carData.length - 1] 
+                : null
+                
+            const latestStint = Array.isArray(stints) && stints.length > 0 
+                ? stints[stints.length - 1] 
+                : null
+            
+            return {
+                driver_number: driverNumber,
+                driver_name: `Driver #${driverNumber}`,
+                tire_compound: latestStint?.compound || 'Unknown',
+                tire_age: latestStint?.tyre_age_at_start || 0,
+                ers: latestCar?.drs ? 100 : 0, // Approximation
+                pit_status: 'None' // Would need pit data
+            }
+        } catch (error) {
+            console.error('Error fetching driver status:', error)
+            return null
+        }
     }
 
     // Fetch lap times for a driver in a session
@@ -215,7 +338,17 @@ export class OpenF1Service {
         sessionKey: string,
         driverNumber: number
     ) {
-        return this.request(`/lap_times?session_key=${sessionKey}&driver_number=${driverNumber}`)
+        try {
+            const data = await this.request(`/v1/laps?session_key=${sessionKey}&driver_number=${driverNumber}`)
+            return Array.isArray(data) ? data.map(lap => ({
+                driver_number: lap.driver_number,
+                lap_number: lap.lap_number,
+                lap_time: lap.lap_duration || 0
+            })) : []
+        } catch (error) {
+            console.error('Error fetching lap times:', error)
+            return []
+        }
     }
 
     // Fetch tire stints for a driver in a session
@@ -223,7 +356,18 @@ export class OpenF1Service {
         sessionKey: string,
         driverNumber: number
     ) {
-        return this.request(`/tire_stints?session_key=${sessionKey}&driver_number=${driverNumber}`)
+        try {
+            const data = await this.request(`/v1/stints?session_key=${sessionKey}&driver_number=${driverNumber}`)
+            return Array.isArray(data) ? data.map(stint => ({
+                driver_number: stint.driver_number,
+                start_lap: stint.lap_start,
+                end_lap: stint.lap_end,
+                compound: stint.compound || 'Unknown'
+            })) : []
+        } catch (error) {
+            console.error('Error fetching tire stints:', error)
+            return []
+        }
     }
 
     // Fetch radio messages for a driver in a session
@@ -231,7 +375,19 @@ export class OpenF1Service {
         sessionKey: string,
         driverNumber: number
     ) {
-        return this.request(`/radio_messages?session_key=${sessionKey}&driver_number=${driverNumber}`)
+        try {
+            const data = await this.request(`/v1/team_radio?session_key=${sessionKey}&driver_number=${driverNumber}`)
+            return Array.isArray(data) ? data.map(msg => ({
+                driver_number: msg.driver_number,
+                session_key: msg.session_key,
+                timestamp: msg.date,
+                message: msg.recording_url ? 'Audio message available' : 'Message',
+                source: 'driver'
+            })) : []
+        } catch (error) {
+            console.error('Error fetching radio messages:', error)
+            return []
+        }
     }
 
     // Fetch driver info for a session (optionally for a specific driver)
@@ -239,9 +395,32 @@ export class OpenF1Service {
         sessionKey: string,
         driverNumber?: number
     ) {
-        let endpoint = `/drivers?session_key=${sessionKey}`
-        if (driverNumber !== undefined) endpoint += `&driver_number=${driverNumber}`
-        return this.request(endpoint)
+        try {
+            let endpoint = `/v1/drivers?session_key=${sessionKey}`
+            if (driverNumber !== undefined) endpoint += `&driver_number=${driverNumber}`
+            
+            const data = await this.request(endpoint)
+            return Array.isArray(data) ? data.map(driver => ({
+                driver_number: driver.driver_number,
+                broadcast_name: driver.broadcast_name || driver.full_name,
+                full_name: driver.full_name,
+                team_name: driver.team_name,
+                country_code: driver.country_code,
+                color: driver.team_colour,
+                headshot_url: driver.headshot_url
+            })) : (data ? [{
+                driver_number: data.driver_number,
+                broadcast_name: data.broadcast_name || data.full_name,
+                full_name: data.full_name,
+                team_name: data.team_name,
+                country_code: data.country_code,
+                color: data.team_colour,
+                headshot_url: data.headshot_url
+            }] : [])
+        } catch (error) {
+            console.error('Error fetching driver info:', error)
+            return []
+        }
     }
 
     // Fetch session events (pit stops, safety cars, crashes, etc.)
@@ -291,16 +470,44 @@ export class OpenF1Service {
     }
 
     // Add this method to fetch session events
-    async getEvents(sessionKey: string){
+    async getEvents(sessionKey: string) {
         try {
-            const response = await fetch(`${this.baseUrl}/events?session_key=${sessionKey}`);
-            if (!response.ok) {
-                throw new Error(`Error fetching events: ${response.status}`);
-            }
-            return await response.json();
+            // OpenF1 doesn't have a direct events endpoint, use race control messages
+            const data = await this.request(`/v1/race_control?session_key=${sessionKey}`)
+            return Array.isArray(data) ? data.map(event => ({
+                type: event.category || 'flag',
+                lap_number: event.lap_number || 1,
+                description: event.message,
+                timestamp: new Date(event.date).getTime(),
+                session_key: event.session_key
+            })) : []
         } catch (error) {
-            console.error("Failed to fetch events:", error);
-            return [];
+            console.error('Error fetching events:', error)
+            return []
+        }
+    }
+
+    // Add new method for getting track layout (OpenF1 doesn't provide SVG paths):
+    async getTrackLayout(sessionKey: string) {
+        try {
+            // OpenF1 doesn't provide track layout SVG, return fallback
+            const session = await this.getSessionDetails(sessionKey)
+            const circuitName = session?.circuit_short_name || 'Unknown'
+            
+            // Return a basic track layout structure
+            return {
+                svgPath: "M40,160 Q60,40 150,40 Q240,40 260,160 Q150,180 40,160 Z", // Fallback oval
+                width: 300,
+                height: 200,
+                circuit_name: circuitName
+            }
+        } catch (error) {
+            console.error('Error fetching track layout:', error)
+            return {
+                svgPath: "M40,160 Q60,40 150,40 Q240,40 260,160 Q150,180 40,160 Z",
+                width: 300,
+                height: 200
+            }
         }
     }
 }

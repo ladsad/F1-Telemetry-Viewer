@@ -89,6 +89,20 @@ function WeatherOverlay({
     };
   }, [fetchWeather, sessionKey, refreshInterval]);
 
+  useEffect(() => {
+    if (!weatherData && !telemetryState.weather) {
+      // Fetch weather data if not provided and not already in context
+      const openf1 = new OpenF1Service("https://api.openf1.org/v1");
+      openf1.getWeather("latest")
+        .then(data => {
+          if (Array.isArray(data) && data.length > 0) {
+            updateWeather(data[data.length - 1]); // Use updateWeather instead of setWeather
+          }
+        })
+        .catch(console.error);
+    }
+  }, [weatherData, telemetryState.weather, updateWeather]);
+
   // Calculate weather impact (memoized to avoid recalculation)
   const impact = useMemo(() => {
     // Safely handle optional values with nullish coalescing

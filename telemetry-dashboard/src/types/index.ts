@@ -323,14 +323,14 @@ export interface ConnectionStatusIndicatorProps {
 /**
  * Props for AnimatedButton component
  */
-export interface AnimatedButtonProps {
-  variant?: 'default' | 'outline' | 'ghost' | 'link';
-  size?: 'sm' | 'md' | 'lg';
-  onClick?: () => void;
+export interface AnimatedButtonProps extends React.ButtonHTMLAttributes<HTMLButtonElement> {
+  variant?: "default" | "outline" | "ghost" | "link" | "primary" | "destructive" | "secondary";
+  size?: "sm" | "md" | "lg";
+  icon?: React.ReactNode;
+  children?: React.ReactNode;
   disabled?: boolean;
   className?: string;
-  children: React.ReactNode;
-  [key: string]: any;
+  onClick?: (event: React.MouseEvent<HTMLButtonElement>) => void;
 }
 
 /**

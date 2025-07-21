@@ -29,6 +29,44 @@ interface DeltaSeriesData {
 
 }
 
+interface DriverInfo {
+  driver_number: number;
+  broadcast_name?: string;
+  full_name?: string;
+  color?: string;
+  team_colour?: string;
+}
+
+function extractDriverInfo(info: any, driverNumber: number): { name: string; color: string } {
+  const getDriverName = (info: any, driverNumber: number): string => {
+    if (Array.isArray(info) && info[0]) {
+      return info[0].broadcast_name || info[0].full_name || `#${driverNumber}`;
+    }
+    if (info && typeof info === 'object') {
+      return info.broadcast_name || info.full_name || `#${driverNumber}`;
+    }
+    return `#${driverNumber}`;
+  };
+
+  const getDriverColor = (info: any): string => {
+    if (Array.isArray(info) && info[0]) {
+      return info[0].color || info[0].team_colour || "#8884d8";
+    }
+    if (info && typeof info === 'object') {
+      return info.color || info.team_colour || "#8884d8";
+    }
+    return "#8884d8";
+  };
+
+  const driverName = getDriverName(info, driverNumber);
+  const color = getDriverColor(info);
+
+  return {
+    name: driverName,
+    color
+  };
+}
+
 export default function DeltaTimeChart({
   sessionKey,
   driverNumbers = [], // Add default value
@@ -55,12 +93,7 @@ export default function DeltaTimeChart({
             openf1.getDriverInfo(sessionKey, driverNumber),
           ])
           
-          const driverName =
-            (Array.isArray(info) ? info[0]?.broadcast_name : info?.broadcast_name) ||
-            `#${driverNumber}`
-          const color =
-            (Array.isArray(info) ? info[0]?.color : info?.color) ||
-            "#8884d8"
+          const { name: driverName, color } = extractDriverInfo(info, driverNumber);
             
           return {
             driverNumber,
@@ -97,7 +130,7 @@ export default function DeltaTimeChart({
             const data = d.laps
               .map((lap) => {
                 const refLap = refLaps.find(l => l.lap_number === lap.lap_number)
-                if (!refLap) return null
+                if (!refLap || !lap.lap_time || !refLap.lap_time) return null
                 
                 const delta = lap.lap_time - refLap.lap_time
                 return { lap: lap.lap_number, delta }

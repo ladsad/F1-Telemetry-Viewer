@@ -20,12 +20,12 @@ const TrackMap = dynamic(() => import("@/components/TrackMap"), {
   ssr: false
 })
 
-const DriverPanel = dynamic(() => import("@/components/DriverPanel").then(mod => ({ default: mod.DriverPanel })), {
+const DriverPanel = dynamic(() => import("@/components/DriverPanel"), {
   loading: () => <div className="h-64 bg-muted/30 rounded-md animate-pulse"></div>,
   ssr: false
 })
 
-const WeatherOverlay = dynamic(() => import("@/components/WeatherOverlay").then(mod => ({ default: mod.WeatherOverlay })), {
+const WeatherOverlay = dynamic(() => import("@/components/WeatherOverlay"), {
   loading: () => <div className="h-48 bg-muted/30 rounded-md animate-pulse"></div>,
   ssr: false
 })
@@ -34,22 +34,35 @@ const WeatherOverlay = dynamic(() => import("@/components/WeatherOverlay").then(
 function LiveTelemetryContent() {
   const { setSelectedDriverNumber } = useTelemetry()
   const [driverOptions, setDriverOptions] = useState<{ number: number, name: string }[]>([])
+  const [selectedDriver, setSelectedDriver] = useState<number | null>(null)
   const sessionKey = "latest"
   
   // Fetch available drivers for the session
   useEffect(() => {
     const openf1 = new OpenF1Service("https://api.openf1.org/v1")
-    openf1.getDriverInfo(sessionKey).then(drivers => {
+    openf1.getDriverInfo("latest").then(drivers => {
       if (Array.isArray(drivers) && drivers.length) {
-        setDriverOptions(
-          drivers.map(d => ({
-            number: d.driver_number,
-            name: d.broadcast_name || `Driver #${d.driver_number}`
-          }))
-        )
+        const driverOpts = drivers.map(d => ({
+          number: d.driver_number,
+          name: d.broadcast_name || d.full_name || `Driver #${d.driver_number}`
+        }))
+        setDriverOptions(driverOpts)
+        
+        // Set default driver if none selected
+        if (!selectedDriver && driverOpts.length > 0) {
+          const defaultDriver = driverOpts[0].number
+          setSelectedDriver(defaultDriver)
+          setSelectedDriverNumber(defaultDriver)
+        }
       }
     }).catch(console.error)
-  }, [sessionKey])
+  }, [selectedDriver, setSelectedDriverNumber])
+  
+  const handleDriverChange = (e: React.ChangeEvent<HTMLSelectElement>) => {
+    const driverNumber = Number(e.target.value)
+    setSelectedDriver(driverNumber)
+    setSelectedDriverNumber(driverNumber)
+  }
   
   return (
     <div className="flex flex-col gap-4">
@@ -61,13 +74,18 @@ function LiveTelemetryContent() {
           <select 
             id="driver-select"
             className="rounded bg-background border px-2 py-1 text-sm w-full sm:w-auto"
-            onChange={e => setSelectedDriverNumber(Number(e.target.value))}
+            value={selectedDriver || ""}
+            onChange={handleDriverChange}
           >
-            {driverOptions.map(d => (
-              <option key={d.number} value={d.number}>
-                #{d.number} {d.name}
-              </option>
-            ))}
+            {driverOptions.length === 0 ? (
+              <option value="">Loading drivers...</option>
+            ) : (
+              driverOptions.map(d => (
+                <option key={d.number} value={d.number}>
+                  #{d.number} {d.name}
+                </option>
+              ))
+            )}
           </select>
         </div>
       </div>

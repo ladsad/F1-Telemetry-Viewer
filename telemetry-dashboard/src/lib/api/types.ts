@@ -81,10 +81,15 @@ export interface OpenF1LapInfo {
 
 // Lap time for a driver in a session
 export interface OpenF1LapTime {
-  driver_number: number
-  lap_number: number
-  lap_time: number // seconds
-  // Add more fields as needed
+  session_key?: string;
+  driver_number: any;
+  lap_number: any;
+  lap_time: any;
+  lap_duration?: any;
+  date_start?: string;
+  segments?: number[];
+  is_personal_best?: boolean;
+  is_sector_best?: boolean;
 }
 
 // Driver info for comparison

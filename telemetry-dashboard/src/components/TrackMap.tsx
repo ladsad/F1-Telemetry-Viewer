@@ -34,31 +34,37 @@ function sectorColor(performance: string) {
 async function fetchTrackData(sessionKey: string) {
   const openf1 = new OpenF1Service("https://api.openf1.org/v1");
 
-  const [positionsRes, sessionRes, sectorRes, lapRes] = await Promise.all([
-    openf1.getDriverPositions(sessionKey),
-    openf1.getSessionDetails(sessionKey),
-    openf1.getSectorTimings(sessionKey),
-    openf1.getLapInfo(sessionKey),
-  ]);
+  try {
+    const [positionsRes, sessionRes, lapRes] = await Promise.all([
+      openf1.getDriverPositions(sessionKey),
+      openf1.getSessionDetails(sessionKey),
+      openf1.getLapInfo(sessionKey),
+    ]);
 
-  const layout = sessionRes?.track_layout || {
-    svgPath: "M40,160 Q60,40 150,40 Q240,40 260,160 Q150,180 40,160 Z",
-    width: 300,
-    height: 200,
-  };
+    const layout = await openf1.getTrackLayout(sessionKey);
 
-  const positions = (positionsRes || []).map((pos: any) => ({
-    driver_number: pos.driver_number,
-    name: pos.driver_name || pos.broadcast_name || `#${pos.driver_number}`,
-    x: pos.normalized_track_position_x ?? 0,
-    y: pos.normalized_track_position_y ?? 0,
-    color: pos.color || pos.team_colour || "#8884d8",
-  }));
+    const positions = (positionsRes || []).map((pos: any) => ({
+      driver_number: pos.driver_number,
+      name: pos.name || `#${pos.driver_number}`,
+      x: pos.x ?? 0,
+      y: pos.y ?? 0,
+      color: pos.color || "#8884d8",
+    }));
 
-  const sectorTimings = sectorRes || [];
-  const lapInfo = lapRes || { currentLap: 1, totalLaps: 0, sectorTimes: [] };
+    // Get sector timings (approximated from intervals)
+    const sectorTimings = await openf1.getSectorTimings(sessionKey);
+    const lapInfo = lapRes || { currentLap: 1, totalLaps: 0, sectorTimes: [] };
 
-  return { positions, layout, sectorTimings, lapInfo };
+    return { positions, layout, sectorTimings, lapInfo };
+  } catch (error) {
+    console.error('Error fetching track data:', error);
+    return { 
+      positions: [], 
+      layout: { svgPath: "M0,0", width: 300, height: 200 }, 
+      sectorTimings: [], 
+      lapInfo: { currentLap: 1, totalLaps: 0, sectorTimes: [] }
+    };
+  }
 }
 
 // Memoize the marker component to prevent unnecessary renders

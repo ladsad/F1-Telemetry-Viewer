@@ -8,9 +8,17 @@ import { OpenF1Service } from "@/lib/api/openf1"
 import { useTelemetry } from "@/context/TelemetryDataContext"
 import ConnectionStatusIndicator from "@/components/ConnectionStatusIndicator"
 import { Loader2 } from "lucide-react"
-import { RaceProgressScrubBarProps, OpenF1Event } from "@/types"
+import { RaceProgressScrubBarProps } from "@/types"
 
-const EVENT_COLORS = {
+// Define OpenF1Event type since it's missing from the types file
+interface OpenF1Event {
+  type: "overtake" | "pit" | "crash" | "flag" | string;
+  lap_number: number;
+  description?: string;
+  timestamp?: number;
+}
+
+const EVENT_COLORS: Record<string, string> = {
   "overtake": "bg-yellow-500 border-yellow-600",
   "pit": "bg-blue-500 border-blue-600",
   "crash": "bg-red-500 border-red-600",
@@ -19,15 +27,15 @@ const EVENT_COLORS = {
 
 export default function RaceProgressScrubBar({ 
   sessionKey,
-  value,
+  value = 1,
   max,
   onChange = () => {},
   showEvents = true 
 }: RaceProgressScrubBarProps) {
   const { colors } = useTheme()
-  const { telemetryState, updateRaceProgress } = useTelemetry()
+  const { telemetryState, updateRaceProgress, connectionStatus } = useTelemetry()
   const { raceProgress } = telemetryState
-  const totalLaps = raceProgress.totalLaps || 100
+  const totalLaps = max || raceProgress.totalLaps || 100
   const [events, setEvents] = useState<OpenF1Event[]>([])
   const [loading, setLoading] = useState(false)
   const [dragging, setDragging] = useState(false)
@@ -58,6 +66,18 @@ export default function RaceProgressScrubBar({
   
   const handleInteractionEnd = () => {
     setDragging(false)
+  }
+
+  // Add missing handlers for mouse and touch events
+  const handleBarClick = (e: React.MouseEvent<HTMLDivElement>) => {
+    handleInteractionStart(e.clientX)
+  }
+
+  const handleBarTouch = (e: React.TouchEvent<HTMLDivElement>) => {
+    if (e.touches[0]) {
+      e.preventDefault()
+      handleInteractionStart(e.touches[0].clientX)
+    }
   }
   
   useEffect(() => {
@@ -90,7 +110,7 @@ export default function RaceProgressScrubBar({
     
     Promise.all([
       openf1.getLapInfo(sessionKey),
-      openf1.getEvents(sessionKey)
+      showEvents ? openf1.getEvents(sessionKey) : Promise.resolve([])
     ]).then(([lapInfoData, eventsData]) => {
       if (Array.isArray(lapInfoData) && lapInfoData.length) {
         const lapInfo = lapInfoData[0]
@@ -101,11 +121,11 @@ export default function RaceProgressScrubBar({
         })
       }
       if (Array.isArray(eventsData)) {
-        setEvents(eventsData)
+        setEvents(eventsData as OpenF1Event[])
       }
     }).catch(console.error)
     .finally(() => setLoading(false))
-  }, [sessionKey, updateRaceProgress])
+  }, [sessionKey, updateRaceProgress, showEvents])
   
   if (!raceProgress.totalLaps) {
     return (
@@ -117,10 +137,11 @@ export default function RaceProgressScrubBar({
     )
   }
   
-  const percent = ((value - 1) / (totalLaps - 1)) * 100
+  const currentValue = value || raceProgress.currentLap || 1
+  const percent = ((currentValue - 1) / (totalLaps - 1)) * 100
   
   // Map events to lap numbers for marker placement
-  const lapMarkers = events.map((e, i) => {
+  const lapMarkers = showEvents ? events.map((e, i) => {
     const lap = e.lap_number
     const markerPercent = ((lap - 1) / (totalLaps - 1)) * 100
     
@@ -137,7 +158,7 @@ export default function RaceProgressScrubBar({
         aria-label={`${e.type} event on lap ${lap}`}
       />
     )
-  })
+  }) : [];
   
   return (
     <Card 
@@ -211,12 +232,12 @@ export default function RaceProgressScrubBar({
         {/* Dynamic lap indicator */}
         <motion.div 
           className="text-responsive-lg font-bold font-formula1 text-center mt-2"
-          key={value}
+          key={currentValue}
           initial={{ opacity: 0, y: -10 }}
           animate={{ opacity: 1, y: 0 }}
           transition={{ type: "spring", stiffness: 300 }}
         >
-          Lap {value}
+          Lap {currentValue}
         </motion.div>
         
         {/* Legend */}

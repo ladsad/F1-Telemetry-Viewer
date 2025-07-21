@@ -2,8 +2,8 @@
 
 import { motion } from "framer-motion"
 import { useTelemetry } from "@/context/TelemetryDataContext"
-import { WiFi, WifiOff, Loader2, AlertTriangle } from "lucide-react"
-import { ConnectionStatusIndicatorProps, ConnectionStatus } from "@/types"
+import { Wifi, WifiOff, Loader2, AlertTriangle } from "lucide-react"
+import { ConnectionStatusIndicatorProps } from "@/types"
 import { useTheme } from "@/components/ThemeProvider"
 
 export default function ConnectionStatusIndicator({
@@ -16,38 +16,48 @@ export default function ConnectionStatusIndicator({
   const { colors } = useTheme()
   
   // Determine the overall status if 'all' is selected
-  let status = service === 'all' 
-    ? (connectionStatus.telemetry === 'open' && connectionStatus.positions === 'open' 
-       ? 'open' 
-       : connectionStatus.telemetry === 'error' || connectionStatus.positions === 'error' 
-       ? 'error'
-       : connectionStatus.telemetry === 'connecting' || connectionStatus.positions === 'connecting'
-       ? 'connecting'
-       : 'closed')
-    : connectionStatus[service]
+  let status: 'open' | 'closed' | 'connecting' | 'error' = 'closed';
+  
+  if (service === 'all') {
+    const allServices = Object.values(connectionStatus);
+    if (allServices.every(s => s === 'open')) {
+      status = 'open';
+    } else if (allServices.some(s => s === 'error')) {
+      status = 'error';
+    } else if (allServices.some(s => s === 'connecting')) {
+      status = 'connecting';
+    } else {
+      status = 'closed';
+    }
+  } else {
+    // Type-safe access to connectionStatus
+    if (service in connectionStatus) {
+      status = connectionStatus[service as keyof typeof connectionStatus];
+    }
+  }
     
   // Icon size based on the size prop
   const iconSize = size === 'sm' ? 14 : size === 'md' ? 18 : 24
   
-  // Status color and icon
+  // Status color and icon - using proper color values instead of Tailwind classes
   let statusColor = ''
-  let StatusIcon = WiFi
+  let StatusIcon = Wifi
   
   switch (status) {
     case 'open':
-      statusColor = 'text-green-500'
-      StatusIcon = WiFi
+      statusColor = '#22c55e' // green-500
+      StatusIcon = Wifi
       break
     case 'closed':
-      statusColor = 'text-red-500'
+      statusColor = '#ef4444' // red-500
       StatusIcon = WifiOff
       break
     case 'connecting':
-      statusColor = 'text-amber-500'
+      statusColor = '#f59e0b' // amber-500
       StatusIcon = Loader2
       break
     case 'error':
-      statusColor = 'text-red-500'
+      statusColor = '#ef4444' // red-500
       StatusIcon = AlertTriangle
       break
   }
@@ -61,20 +71,27 @@ export default function ConnectionStatusIndicator({
   const floatingStyles = position === 'floating' 
     ? 'fixed bottom-4 right-4 z-50 shadow-lg rounded-full px-3 py-2 bg-background border' 
     : ''
+  
+  // Text size classes
+  const textSizeClass = size === 'sm' ? 'text-xs' : size === 'md' ? 'text-sm' : 'text-base';
     
   return (
     <motion.div 
-      className={`flex items-center gap-1 ${statusColor} ${floatingStyles}`}
-      style={position === 'floating' ? { borderColor: colors.primary } : {}}
+      className={`flex items-center gap-1 ${floatingStyles}`}
+      style={{ 
+        color: statusColor,
+        ...(position === 'floating' ? { borderColor: colors.primary } : {})
+      }}
       initial={{ opacity: 0 }}
       animate={{ opacity: 1 }}
+      transition={{ duration: 0.3 }}
     >
       <StatusIcon 
         className={`${status === 'connecting' ? 'animate-spin' : ''}`}
         size={iconSize} 
       />
       {showLabel && (
-        <span className={`text-${size === 'sm' ? 'xs' : size === 'md' ? 'sm' : 'base'}`}>
+        <span className={textSizeClass}>
           {statusLabel}
         </span>
       )}

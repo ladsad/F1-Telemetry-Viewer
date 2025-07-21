@@ -11,6 +11,7 @@ import AnimatedButton from "@/components/AnimatedButton";
 import { useTelemetry } from "@/context/TelemetryDataContext";
 import ConnectionStatusIndicator from "@/components/ConnectionStatusIndicator";
 import { Loader2 } from "lucide-react";
+import { TrackMapProps, DriverPosition, OpenF1TrackLayout } from "@/types";
 
 // Types for sector time display
 type SectorTimeDisplay = {

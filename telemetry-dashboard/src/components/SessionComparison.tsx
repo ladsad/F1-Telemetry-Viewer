@@ -1,11 +1,12 @@
 "use client"
 
-import { useEffect, useState } from "react"
-import { Card, CardHeader, CardTitle, CardContent } from "@/components/ui/card"
-import { OpenF1Service } from "@/lib/api/openf1"
-import HistoricSessionSelector from "@/components/HistoricSessionSelector"
+import { useEffect, useState } from "react";
+import { Card, CardHeader, CardTitle, CardContent } from "@/components/ui/card";
+import { OpenF1Service } from "@/lib/api/openf1";
+import HistoricSessionSelector from "@/components/HistoricSessionSelector";
 import { FixedSizeList as List } from 'react-window';
 import AutoSizer from 'react-virtualized-auto-sizer';
+import { SessionComparisonProps, SessionInfo } from "@/types";
 
 type Session = {
   session_key: string
@@ -28,8 +29,11 @@ type Telemetry = {
   [key: string]: any
 }
 
-export default function SessionComparison() {
-  const [selected, setSelected] = useState<Session[]>([])
+export default function SessionComparison({ 
+  selectedSessions = [], 
+  metricType = 'lap_time' 
+}: SessionComparisonProps) {
+  const [selected, setSelected] = useState<Session[]>(selectedSessions)
   const [telemetry, setTelemetry] = useState<Record<string, Telemetry[]>>({})
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)

@@ -1,32 +1,30 @@
 "use client"
 
-import React, { useEffect, useState, useRef, useCallback, useMemo } from "react"
-import { Card, CardHeader, CardTitle, CardContent } from "@/components/ui/card"
-import { OpenF1Service } from "@/lib/api/openf1"
-import type { OpenF1LapTime, OpenF1DriverInfo } from "@/lib/api/types"
-import { LineChart, Line, XAxis, YAxis, Tooltip, Legend, ResponsiveContainer, ReferenceLine } from "recharts"
-import { useTheme } from "@/components/ThemeProvider"
-import { Clock, ArrowUpDown, Download } from "lucide-react"
-import AnimatedButton from "@/components/AnimatedButton"
-import ConnectionStatusIndicator from "@/components/ConnectionStatusIndicator"
-import { Loader2 } from "lucide-react"
+import React, { useEffect, useState, useRef, useCallback, useMemo } from "react";
+import { Card, CardHeader, CardTitle, CardContent } from "@/components/ui/card";
+import { OpenF1Service } from "@/lib/api/openf1";
+import { LineChart, Line, XAxis, YAxis, Tooltip, Legend, ResponsiveContainer, ReferenceLine } from "recharts";
+import { useTheme } from "@/components/ThemeProvider";
+import { Clock, ArrowUpDown, Download, AlertTriangle } from "lucide-react";
+import AnimatedButton from "@/components/AnimatedButton";
+import ConnectionStatusIndicator from "@/components/ConnectionStatusIndicator";
+import { Loader2 } from "lucide-react";
 import { FixedSizeList as List } from 'react-window';
 import AutoSizer from 'react-virtualized-auto-sizer';
-
-type LapTimeComparisonChartProps = {
-  sessionKey: string
-  driverNumbers: number[]
-}
+import { LapTimeComparisonChartProps, OpenF1LapTime } from "@/types";
+import { useTelemetry } from "@/context/TelemetryDataContext";
 
 type Series = {
-  name: string
-  color: string
-  data: { lap: number; time: number }[]
-}
+  name: string;
+  color: string;
+  driverNumber: number;
+  data: { lap: number; time: number }[];
+};
 
 function LapTimeComparisonChart({
   sessionKey,
   driverNumbers,
+  highlightedLap
 }: LapTimeComparisonChartProps) {
   const { colors } = useTheme();
   const [series, setSeries] = useState<Series[]>([]);
@@ -60,6 +58,7 @@ function LapTimeComparisonChart({
         return {
           name: driverName,
           color,
+          driverNumber,
           data: (laps || []).map((l: OpenF1LapTime) => ({
             lap: l.lap_number,
             time: l.lap_time,

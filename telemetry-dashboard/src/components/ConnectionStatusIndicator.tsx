@@ -2,15 +2,9 @@
 
 import { motion } from "framer-motion"
 import { useTelemetry } from "@/context/TelemetryDataContext"
-import { Wifi, WifiOff, Loader2, AlertTriangle } from "lucide-react"
+import { WiFi, WifiOff, Loader2, AlertTriangle } from "lucide-react"
+import { ConnectionStatusIndicatorProps, ConnectionStatus } from "@/types"
 import { useTheme } from "@/components/ThemeProvider"
-
-type ConnectionStatusIndicatorProps = {
-  service?: 'telemetry' | 'positions' | 'timing' | 'all'
-  showLabel?: boolean
-  size?: 'sm' | 'md' | 'lg'
-  position?: 'inline' | 'floating'
-}
 
 export default function ConnectionStatusIndicator({
   service = 'all',
@@ -37,12 +31,12 @@ export default function ConnectionStatusIndicator({
   
   // Status color and icon
   let statusColor = ''
-  let StatusIcon = Wifi
+  let StatusIcon = WiFi
   
   switch (status) {
     case 'open':
       statusColor = 'text-green-500'
-      StatusIcon = Wifi
+      StatusIcon = WiFi
       break
     case 'closed':
       statusColor = 'text-red-500'

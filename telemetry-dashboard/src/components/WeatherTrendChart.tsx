@@ -2,49 +2,51 @@
 
 import { useEffect, useState } from "react"
 import { Card, CardHeader, CardTitle, CardContent } from "@/components/ui/card"
+import { LineChart, Line, XAxis, YAxis, Tooltip, ResponsiveContainer } from "recharts"
 import type { OpenF1WeatherData, OpenF1WeatherTimeSeries } from "@/lib/api/types"
+import { WeatherTrendChartProps } from "@/types"
+
+type LineChartProps = {
+  data: any[]
+  label: string
+  color: string
+  valueKey: string
+  unit: string
+}
 
 // Simple SVG line chart for weather trends
-function LineChart({
+function CustomLineChart({
   data,
   label,
   color = "#3b82f6",
   valueKey,
   unit,
-}: {
-  data: { date: string; [key: string]: number }[]
-  label: string
-  color?: string
-  valueKey: string
-  unit?: string
-}) {
+}: LineChartProps) {
   if (!data.length) return null
   const values = data.map(d => d[valueKey])
   const min = Math.min(...values)
   const max = Math.max(...values)
-  const points = data.map((d, i) => {
-    const x = (i / (data.length - 1)) * 280 + 10
-    const y = 60 - ((d[valueKey] - min) / (max - min || 1)) * 40 + 10
-    return `${x},${y}`
-  })
   return (
     <div className="flex flex-col items-start">
       <span className="text-xs text-muted-foreground mb-1">{label}</span>
-      <svg width={300} height={80}>
-        <polyline
-          fill="none"
-          stroke={color}
-          strokeWidth={2}
-          points={points.join(" ")}
-        />
-        {data.map((d, i) => {
-          const x = (i / (data.length - 1)) * 280 + 10
-          const y = 60 - ((d[valueKey] - min) / (max - min || 1)) * 40 + 10
-          return (
-            <circle key={i} cx={x} cy={y} r={2.5} fill={color} />
-          )
-        })}
-      </svg>
+      <ResponsiveContainer width="100%" height={80}>
+        <LineChart data={data} margin={{ top: 0, right: 0, left: 0, bottom: 0 }}>
+          <XAxis dataKey="date" hide />
+          <YAxis hide domain={[min, max]} />
+          <Tooltip
+            contentStyle={{ backgroundColor: "white", borderRadius: "4px", border: "1px solid #ddd" }}
+            labelStyle={{ display: "none" }}
+            itemStyle={{ color: "#333", fontSize: "12px" }}
+          />
+          <Line
+            type="monotone"
+            dataKey={valueKey}
+            stroke={color}
+            strokeWidth={2}
+            dot={false}
+          />
+        </LineChart>
+      </ResponsiveContainer>
       <div className="flex justify-between w-full text-xs text-muted-foreground mt-1">
         <span>{new Date(data[0].date).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}</span>
         <span>{new Date(data[data.length - 1].date).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}</span>
@@ -54,10 +56,6 @@ function LineChart({
       </div>
     </div>
   )
-}
-
-type WeatherTrendChartProps = {
-  sessionKey: string
 }
 
 export default function WeatherTrendChart({ sessionKey }: WeatherTrendChartProps) {
@@ -92,28 +90,28 @@ export default function WeatherTrendChart({ sessionKey }: WeatherTrendChartProps
         {loading && <div className="text-xs text-muted-foreground">Loading weather trends...</div>}
         {!loading && (
           <div className="flex flex-col gap-4">
-            <LineChart
+            <CustomLineChart
               data={hourly}
               label="Hourly Air Temp (°C)"
               color="#f59e42"
               valueKey="air_temperature"
               unit="°C"
             />
-            <LineChart
+            <CustomLineChart
               data={hourly}
               label="Hourly Rainfall (mm)"
               color="#3b82f6"
               valueKey="rainfall"
               unit="mm"
             />
-            <LineChart
+            <CustomLineChart
               data={historic}
               label="Historic Track Temp (°C)"
               color="#fbbf24"
               valueKey="track_temperature"
               unit="°C"
             />
-            <LineChart
+            <CustomLineChart
               data={historic}
               label="Historic Wind Speed (km/h)"
               color="#06b6d4"

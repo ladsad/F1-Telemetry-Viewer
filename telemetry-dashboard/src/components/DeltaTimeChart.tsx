@@ -1,19 +1,13 @@
 "use client"
 
-import { useEffect, useState } from "react"
-import { Card, CardHeader, CardTitle, CardContent } from "@/components/ui/card"
-import { OpenF1Service } from "@/lib/api/openf1"
-import type { OpenF1LapTime, OpenF1DeltaTime, OpenF1DriverInfo } from "@/lib/api/types"
-import { LineChart, Line, XAxis, YAxis, Tooltip, Legend, ResponsiveContainer } from "recharts"
-import { useTheme } from "@/components/ThemeProvider"
+import { useEffect, useState } from "react";
+import { Card, CardHeader, CardTitle, CardContent } from "@/components/ui/card";
+import { OpenF1Service } from "@/lib/api/openf1";
+import { LineChart, Line, XAxis, YAxis, Tooltip, Legend, ResponsiveContainer } from "recharts";
+import { useTheme } from "@/components/ThemeProvider";
 import { FixedSizeList as List } from 'react-window';
 import AutoSizer from 'react-virtualized-auto-sizer';
-
-type DeltaTimeChartProps = {
-  sessionKey: string
-  driverNumbers: number[]
-  referenceDriver?: number // If not provided, use the first driver as reference
-}
+import { DeltaTimeChartProps } from "@/types";
 
 export default function DeltaTimeChart({
   sessionKey,

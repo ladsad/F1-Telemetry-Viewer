@@ -9,29 +9,24 @@ import { SpeedometerIcon, ERSIcon } from "@/components/Icons";
 import AnimatedButton from "@/components/AnimatedButton";
 import { useWebSocket } from "@/lib/hooks/useWebSocket";
 import { useTelemetry } from "@/context/TelemetryDataContext";
-
-type TelemetryDisplayProps = {
-  refreshIntervalMs?: number;
-  fallbackApiUrl?: string;
-};
+import { TelemetryDisplayProps, TelemetryData } from "@/types";
+import ConnectionStatusIndicator from "@/components/ConnectionStatusIndicator";
 
 const TELEMETRY_CACHE_KEY = "telemetry_last_data";
 
 // Cache utility functions
-function saveTelemetryToCache(data: any) {
-  try {
+function saveTelemetryToCache(data: TelemetryData) {
+  if (typeof window !== 'undefined') {
     localStorage.setItem(TELEMETRY_CACHE_KEY, JSON.stringify(data));
-  } catch {}
+  }
 }
 
-function loadTelemetryFromCache(): any {
-  try {
-    const raw = localStorage.getItem(TELEMETRY_CACHE_KEY);
-    if (!raw) return null;
-    return JSON.parse(raw);
-  } catch {
-    return null;
+function loadTelemetryFromCache(): TelemetryData | null {
+  if (typeof window !== 'undefined') {
+    const cached = localStorage.getItem(TELEMETRY_CACHE_KEY);
+    return cached ? JSON.parse(cached) : null;
   }
+  return null;
 }
 
 // Memoize the MetricDisplay component to prevent unnecessary renders

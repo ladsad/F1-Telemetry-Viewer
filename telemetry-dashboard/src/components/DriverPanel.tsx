@@ -9,14 +9,7 @@ import { useTelemetry } from "@/context/TelemetryDataContext";
 import ConnectionStatusIndicator from "@/components/ConnectionStatusIndicator";
 import { Loader2 } from "lucide-react";
 import { OpenF1Service } from "@/lib/api/openf1";
-
-// Define proper types for the StatusIndicator props
-interface StatusIndicatorProps {
-  label: string;
-  value: string | number;
-  icon: React.ReactElement;
-  color?: string;
-}
+import { StatusIndicatorProps, DriverPanelProps } from "@/types";
 
 // Create a memoized status component with proper typing
 const StatusIndicator = React.memo(({ label, value, icon, color = "" }: StatusIndicatorProps) => (
@@ -37,7 +30,7 @@ const compoundColors: Record<string, string> = {
   "UNKNOWN": "bg-gray-300"
 };
 
-export function DriverPanel() {
+export function DriverPanel({ driverNumber, sessionKey, showDetails = true }: DriverPanelProps = {}) {
   const { colors } = useTheme();
   const [expanded, setExpanded] = useState(false);
   
@@ -46,7 +39,7 @@ export function DriverPanel() {
     telemetryState, 
     updateDriverStatus,
     selectedDriverNumber,
-    sessionKey,
+    sessionKey: contextSessionKey,
     connectionStatus
   } = useTelemetry();
   

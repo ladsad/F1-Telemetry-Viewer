@@ -8,12 +8,7 @@ import { useTelemetry } from "@/context/TelemetryDataContext";
 import { Loader2, Download } from "lucide-react";
 import ConnectionStatusIndicator from "@/components/ConnectionStatusIndicator";
 import AnimatedButton from "@/components/AnimatedButton";
-
-type TelemetryHistoryGridProps = {
-  sessionKey?: string;
-  maxHeight?: number;
-  title?: string;
-};
+import { TelemetryHistoryGridProps } from "@/types";
 
 export default function TelemetryHistoryGrid({ 
   sessionKey = 'latest',

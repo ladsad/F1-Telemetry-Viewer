@@ -3,75 +3,15 @@
 import React, { createContext, useContext, useState, useEffect, useCallback } from "react";
 import { useWebSocket } from "@/lib/hooks/useWebSocket";
 import { useTelemetryQueue } from "@/lib/hooks/useTelemetryQueue";
-
-// Define types for all telemetry data that needs to be synchronized
-export interface TelemetryState {
-  // Car telemetry
-  carData: {
-    speed: number;
-    throttle: number;
-    brake: number;
-    gear: number;
-    drs: boolean;
-    rpm: number;
-    timestamp?: number;
-  };
-
-  // Driver positions for track map
-  positions: Array<{
-    driver_number: number;
-    name: string;
-    x: number;
-    y: number;
-    color: string;
-    timestamp?: number;
-  }>;
-
-  // Current weather conditions
-  weather: {
-    air_temperature: number;
-    track_temperature: number;
-    humidity: number;
-    pressure: number;
-    wind_speed: number;
-    wind_direction: string;
-    rainfall: number;
-    timestamp?: number;
-  } | null;
-
-  // Current lap and sector information
-  raceProgress: {
-    currentLap: number;
-    totalLaps: number;
-    sectorTimes: Array<{
-      sector: number;
-      time?: number;
-      driver?: number;
-      performance?: string;
-      color: string;
-    }>;
-    timestamp?: number;
-  };
-
-  // Selected driver status (tire, ERS, etc)
-  driverStatus: Record<number, {
-    driver_number: number;
-    driver_name: string;
-    teamColor: string;
-    tire_compound: string;
-    tire_age: number;
-    ers: number;
-    pit_status: string;
-    last_pit: number | null;
-    timestamp?: number;
-  }> | null;
-
-  // Session identifier
-  sessionKey: string;
-
-  // Add telemetry history
-  telemetryHistory: TelemetryTimeSeriesData | null;
-}
+import { 
+  TelemetryState, 
+  TelemetryContextType, 
+  ConnectionStatus, 
+  TelemetryDataPoint,
+  TelemetryTimeSeriesData,
+  MetricQueryFilter,
+  QueryResult
+} from "@/types";
 
 // Context initial state
 const initialTelemetryState: TelemetryState = {
@@ -96,27 +36,6 @@ const initialTelemetryState: TelemetryState = {
 };
 
 // Create context
-interface TelemetryContextType {
-  telemetryState: TelemetryState;
-  updateTelemetryState: (update: Partial<TelemetryState>) => void;
-  updateCarData: (data: Partial<TelemetryState["carData"]>) => void;
-  updatePositions: (positions: TelemetryState["positions"]) => void;
-  updateWeather: (weather: TelemetryState["weather"]) => void;
-  updateRaceProgress: (progress: Partial<TelemetryState["raceProgress"]>) => void;
-  updateDriverStatus: (driverNumber: number, status: Partial<TelemetryState["driverStatus"][number]>) => void;
-  connectionStatus: {
-    telemetry: "open" | "connecting" | "closed" | "error";
-    positions: "open" | "connecting" | "closed" | "error";
-  };
-  setSessionKey: (key: string) => void;
-  selectedDriverNumber: number;
-  setSelectedDriverNumber: (driverNumber: number) => void;
-  
-  // Add methods for telemetry history
-  updateTelemetryHistory: (data: TelemetryDataPoint[]) => void;
-  queryTelemetryHistory: (filter: MetricQueryFilter) => QueryResult<TelemetryDataPoint>;
-}
-
 const TelemetryContext = createContext<TelemetryContextType | undefined>(undefined);
 
 // Provider component
@@ -517,13 +436,11 @@ export function TelemetryProvider({ children }: { children: React.ReactNode }) {
   );
 }
 
-// Custom hook for using the telemetry context
-export function useTelemetry() {
+// Custom hook to use the telemetry context
+export function useTelemetry(): TelemetryContextType {
   const context = useContext(TelemetryContext);
-  
-  if (context === undefined) {
-    throw new Error('useTelemetry must be used within a TelemetryProvider');
+  if context === undefined) {
+    throw new Error("useTelemetry must be used within a TelemetryProvider");
   }
-  
   return context;
 }

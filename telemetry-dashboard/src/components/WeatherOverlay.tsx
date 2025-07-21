@@ -10,11 +10,19 @@ import { useTelemetry } from "@/context/TelemetryDataContext";
 import WeatherAlert from "@/components/WeatherAlert";
 import WeatherImpactIndicator from "@/components/WeatherImpactIndicator";
 import WeatherTrendChart from "@/components/WeatherTrendChart";
-import ConnectionStatusIndicator from "@/components/ConnectionStatusIndicator"
-import { Loader2 } from "lucide-react"
+import ConnectionStatusIndicator from "@/components/ConnectionStatusIndicator";
+import { Loader2 } from "lucide-react";
+import { WeatherOverlayProps, WeatherData } from "@/types";
 
 // Create a memoized weather metric component
-const WeatherMetric = React.memo(({ icon, value, unit, label }) => (
+type WeatherMetricProps = {
+  icon: React.ReactNode;
+  value: number | string;
+  unit: string;
+  label: string;
+};
+
+const WeatherMetric = React.memo(({ icon, value, unit, label }: WeatherMetricProps) => (
   <motion.div 
     className="flex items-center gap-2"
     whileHover={{ scale: 1.05 }}
@@ -27,7 +35,12 @@ const WeatherMetric = React.memo(({ icon, value, unit, label }) => (
   </motion.div>
 ));
 
-export function WeatherOverlay() {
+export function WeatherOverlay({ 
+  weatherData, 
+  showForecast = false, 
+  showImpact = true,
+  refreshInterval = 10000 
+}: WeatherOverlayProps = {}) {
   const { colors } = useTheme();
   const { telemetryState, updateWeather, sessionKey, connectionStatus } = useTelemetry();
   const { weather } = telemetryState;
@@ -55,13 +68,13 @@ export function WeatherOverlay() {
     let mounted = true;
     
     fetchWeather();
-    const interval = setInterval(fetchWeather, 10000);
+    const interval = setInterval(fetchWeather, refreshInterval);
     
     return () => {
       mounted = false;
       clearInterval(interval);
     };
-  }, [fetchWeather, sessionKey]);
+  }, [fetchWeather, sessionKey, refreshInterval]);
 
   // Calculate weather impact (memoized to avoid recalculation)
   const impact = useMemo(() => {
@@ -170,24 +183,28 @@ export function WeatherOverlay() {
             />
           </div>
           
-          <motion.div
-            initial={{ opacity: 0, y: 10 }}
-            animate={{ opacity: 1, y: 0 }}
-            transition={{ delay: 0.3 }}
-            className="mt-4"
-          >
-            <WeatherImpactIndicator weather={weather} impact={impact} />
-          </motion.div>
+          {showImpact && (
+            <motion.div
+              initial={{ opacity: 0, y: 10 }}
+              animate={{ opacity: 1, y: 0 }}
+              transition={{ delay: 0.3 }}
+              className="mt-4"
+            >
+              <WeatherImpactIndicator weather={weather} impact={impact} />
+            </motion.div>
+          )}
         </CardContent>
         
-        <motion.div 
-          className="mt-4"
-          initial={{ opacity: 0 }}
-          animate={{ opacity: 1 }}
-          transition={{ delay: 0.5 }}
-        >
-          <WeatherTrendChart />
-        </motion.div>
+        {showForecast && (
+          <motion.div 
+            className="mt-4"
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            transition={{ delay: 0.5 }}
+          >
+            <WeatherTrendChart />
+          </motion.div>
+        )}
       </Card>
     </motion.div>
   );

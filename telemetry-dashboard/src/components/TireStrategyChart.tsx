@@ -1,10 +1,10 @@
 "use client"
 
-import { useEffect, useState } from "react"
-import { Card, CardHeader, CardTitle, CardContent } from "@/components/ui/card"
-import type { OpenF1TireStint } from "@/lib/api/types"
-import { OpenF1Service } from "@/lib/api/openf1"
-import { useTheme } from "@/components/ThemeProvider"
+import { useEffect, useState } from "react";
+import { Card, CardHeader, CardTitle, CardContent } from "@/components/ui/card";
+import { OpenF1Service } from "@/lib/api/openf1";
+import { useTheme } from "@/components/ThemeProvider";
+import { TireStrategyChartProps, OpenF1TireStint } from "@/types";
 
 const compoundColors: Record<string, string> = {
   Soft: "#ef4444",
@@ -12,14 +12,12 @@ const compoundColors: Record<string, string> = {
   Hard: "#d1d5db",
   Inter: "#22c55e",
   Wet: "#3b82f6",
-}
+};
 
-type TireStrategyChartProps = {
-  sessionKey: string
-  driverNumber: number
-}
-
-export default function TireStrategyChart({ sessionKey, driverNumber }: TireStrategyChartProps) {
+export default function TireStrategyChart({ 
+  sessionKey, 
+  driverNumber 
+}: TireStrategyChartProps) {
   const { colors } = useTheme()
   const [stints, setStints] = useState<OpenF1TireStint[]>([])
   const [loading, setLoading] = useState(false)

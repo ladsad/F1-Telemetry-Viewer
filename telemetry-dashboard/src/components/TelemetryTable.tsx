@@ -7,28 +7,14 @@ import AutoSizer from 'react-virtualized-auto-sizer';
 import { useTelemetry } from "@/context/TelemetryDataContext";
 import { Loader2 } from "lucide-react";
 import ConnectionStatusIndicator from "@/components/ConnectionStatusIndicator";
-
-type TelemetryTableProps = {
-  data?: Array<{
-    timestamp: number;
-    speed: number;
-    throttle: number;
-    brake: number;
-    gear: number;
-    rpm: number;
-    drs: boolean;
-    [key: string]: any;
-  }>;
-  title?: string;
-  maxHeight?: number;
-  showConnectionStatus?: boolean;
-};
+import { TelemetryTableProps } from "@/types";
 
 export default function TelemetryTable({ 
   data: providedData,
   title = "Telemetry Data",
   maxHeight = 400,
   showConnectionStatus = true,
+  virtualScrollOptions = { itemSize: 36, overscanCount: 5 }
 }: TelemetryTableProps) {
   const { telemetryState, connectionStatus } = useTelemetry();
   const [sortField, setSortField] = useState<string>('timestamp');
@@ -118,8 +104,9 @@ export default function TelemetryTable({
                   <List
                     height={height}
                     itemCount={sortedData.length}
-                    itemSize={36}
+                    itemSize={virtualScrollOptions.itemSize}
                     width={width}
+                    overscanCount={virtualScrollOptions.overscanCount}
                   >
                     {({ index, style }) => {
                       const item = sortedData[index];

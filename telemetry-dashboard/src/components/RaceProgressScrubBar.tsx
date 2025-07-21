@@ -4,11 +4,11 @@ import { useEffect, useState, useRef } from "react"
 import { Card, CardContent } from "@/components/ui/card"
 import { motion } from "framer-motion"
 import { useTheme } from "@/components/ThemeProvider"
-import type { OpenF1Event, OpenF1LapInfo } from "@/lib/api/types"
 import { OpenF1Service } from "@/lib/api/openf1"
 import { useTelemetry } from "@/context/TelemetryDataContext"
 import ConnectionStatusIndicator from "@/components/ConnectionStatusIndicator"
 import { Loader2 } from "lucide-react"
+import { RaceProgressScrubBarProps, OpenF1Event } from "@/types"
 
 const EVENT_COLORS = {
   "overtake": "bg-yellow-500 border-yellow-600",
@@ -17,22 +17,22 @@ const EVENT_COLORS = {
   "flag": "bg-purple-500 border-purple-600",
 }
 
-type RaceProgressScrubBarProps = {
-  onChange: (lap: number) => void
-}
-
-export default function RaceProgressScrubBar({ onChange }: RaceProgressScrubBarProps) {
+export default function RaceProgressScrubBar({ 
+  sessionKey,
+  value,
+  max,
+  onChange = () => {},
+  showEvents = true 
+}: RaceProgressScrubBarProps) {
   const { colors } = useTheme()
-  const { telemetryState, sessionKey, updateRaceProgress } = useTelemetry()
+  const { telemetryState, updateRaceProgress } = useTelemetry()
   const { raceProgress } = telemetryState
-  const value = raceProgress.currentLap
-  
+  const totalLaps = raceProgress.totalLaps || 100
   const [events, setEvents] = useState<OpenF1Event[]>([])
   const [loading, setLoading] = useState(false)
   const [dragging, setDragging] = useState(false)
   const barRef = useRef<HTMLDivElement>(null)
   const thumbRef = useRef<HTMLDivElement>(null)
-  const totalLaps = raceProgress.totalLaps || 100
   
   // Handle touch and mouse events for scrubbing
   const handleInteractionStart = (clientX: number) => {

@@ -2,14 +2,9 @@
 
 import { useEffect, useState } from "react"
 import { Card, CardHeader, CardTitle, CardContent } from "@/components/ui/card"
-import type { OpenF1LapTime, OpenF1SectorTiming } from "@/lib/api/types"
 import { OpenF1Service } from "@/lib/api/openf1"
 import { useTheme } from "@/components/ThemeProvider"
-
-type DriverPerformanceMetricsProps = {
-  sessionKey: string
-  driverNumber: number
-}
+import { DriverPerformanceMetricsProps, OpenF1LapTime, OpenF1SectorTiming } from "@/types"
 
 export default function DriverPerformanceMetrics({ sessionKey, driverNumber }: DriverPerformanceMetricsProps) {
   const { colors } = useTheme()

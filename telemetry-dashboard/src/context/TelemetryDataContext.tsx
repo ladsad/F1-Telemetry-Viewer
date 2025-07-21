@@ -42,6 +42,17 @@ const TelemetryContext = createContext<TelemetryContextType | undefined>(undefin
 export function TelemetryProvider({ children }: { children: React.ReactNode }) {
   const [telemetryState, setTelemetryState] = useState<TelemetryState>(initialTelemetryState);
   const [selectedDriverNumber, setSelectedDriverNumber] = useState<number>(1);
+  
+  // Add the missing connection status state
+  const [connectionStatus, setConnectionStatus] = useState<{
+    telemetry: ConnectionStatus;
+    positions: ConnectionStatus;
+    timing: ConnectionStatus;
+  }>({
+    telemetry: 'closed',
+    positions: 'closed',
+    timing: 'closed'
+  });
 
   // WebSocket endpoints
   const telemetryEndpoint = telemetryState.sessionKey 
@@ -364,7 +375,9 @@ export function TelemetryProvider({ children }: { children: React.ReactNode }) {
     // Cache result
     if (queryCache.size >= telemetryState.telemetryHistory.cacheSize) {
       const firstKey = queryCache.keys().next().value;
-      queryCache.delete(firstKey);
+      if (typeof firstKey === "string") {
+        queryCache.delete(firstKey);
+      }
     }
     queryCache.set(cacheKey, queryResult);
     
@@ -409,7 +422,7 @@ export function TelemetryProvider({ children }: { children: React.ReactNode }) {
     };
   }
   
-  // Context value
+  // Update the value object to include the full connection status
   const value = {
     telemetryState,
     updateTelemetryState,
@@ -421,6 +434,7 @@ export function TelemetryProvider({ children }: { children: React.ReactNode }) {
     connectionStatus: {
       telemetry: telemetryStatus,
       positions: positionsStatus,
+      timing: connectionStatus.timing // Use the state value for timing
     },
     setSessionKey,
     selectedDriverNumber,
@@ -439,7 +453,7 @@ export function TelemetryProvider({ children }: { children: React.ReactNode }) {
 // Custom hook to use the telemetry context
 export function useTelemetry(): TelemetryContextType {
   const context = useContext(TelemetryContext);
-  if context === undefined) {
+  if (context === undefined) {
     throw new Error("useTelemetry must be used within a TelemetryProvider");
   }
   return context;

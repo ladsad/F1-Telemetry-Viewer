@@ -522,6 +522,24 @@ export interface TelemetryVirtualizationResult<T> {
   processedCount: number;
 }
 
+// Add these enhanced types for the virtualized component:
+export interface VirtualizedChartOptions {
+  maxVisiblePoints: number;
+  compressionThreshold: number;
+  progressiveLoadBatchSize: number;
+  enableDataCulling: boolean;
+  enableProgressiveLoading: boolean;
+  cullingStrategy: 'uniform' | 'adaptive' | 'importance-based';
+}
+
+export interface ChartVirtualizationMetrics {
+  totalDataPoints: number;
+  visibleDataPoints: number;
+  compressionRatio: number;
+  renderTime: number;
+  samplingStrategy: string;
+}
+
 /**
  * OpenF1 API event type
  */

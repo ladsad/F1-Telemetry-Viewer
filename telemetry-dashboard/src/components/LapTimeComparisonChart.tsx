@@ -1,9 +1,10 @@
 "use client"
 
 import React, { useEffect, useState, useRef, useCallback, useMemo } from "react";
+import dynamic from "next/dynamic";
 import { Card, CardHeader, CardTitle, CardContent } from "@/components/ui/card";
 import { OpenF1Service } from "@/lib/api/openf1";
-import { LineChart, Line, XAxis, YAxis, Tooltip, Legend, ResponsiveContainer, ReferenceLine } from "recharts";
+import { Line, XAxis, YAxis, Tooltip, Legend, ReferenceLine } from "recharts";
 import { useTheme } from "@/components/ThemeProvider";
 import { Clock, ArrowUpDown, Download, AlertTriangle, Filter, Zap, Eye, EyeOff } from "lucide-react";
 import { motion, AnimatePresence } from "framer-motion";
@@ -18,6 +19,23 @@ import { Input } from "@/components/ui/input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Badge } from "@/components/ui/badge";
+
+// Lazy load chart library
+const ResponsiveContainer = dynamic(() => 
+  import("recharts").then(mod => ({ default: mod.ResponsiveContainer })), 
+  { ssr: false }
+);
+
+const LineChart = dynamic(() => 
+  import("recharts").then(mod => ({ default: mod.LineChart })), 
+  { ssr: false }
+);
+
+// Lazy load virtualization
+const VariableSizeList = dynamic(() => 
+  import("react-window").then(mod => ({ default: mod.VariableSizeList })), 
+  { ssr: false }
+);
 
 // Enhanced types for virtualization
 interface VirtualizedSeries {

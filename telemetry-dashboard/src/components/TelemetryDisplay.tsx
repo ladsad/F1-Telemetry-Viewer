@@ -1,6 +1,7 @@
 "use client"
 
-import React, { useEffect, useState, useCallback, useMemo } from "react";
+import { useEffect, useState, useCallback, useMemo, Suspense } from "react";
+import dynamic from "next/dynamic";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Gauge, Zap, Activity, Settings, TrendingUp, RefreshCw, AlertCircle } from "lucide-react";
 import { motion, AnimatePresence } from "framer-motion";
@@ -14,6 +15,17 @@ import ConnectionStatusIndicator from "@/components/ConnectionStatusIndicator";
 import { OpenF1Service } from "@/lib/api/openf1"; // Add this import
 
 const TELEMETRY_CACHE_KEY = "telemetry_last_data";
+
+// Lazy load heavy chart dependencies
+const AnimatedGauge = dynamic(() => import("@/components/ui/AnimatedGauge"), {
+  loading: () => <div className="w-16 h-16 bg-muted animate-pulse rounded-full" />,
+  ssr: false
+});
+
+const SpeedometerIcon = dynamic(() => import("@/components/Icons").then(mod => ({ default: mod.SpeedometerIcon })), {
+  loading: () => <div className="w-6 h-6 bg-muted animate-pulse rounded" />,
+  ssr: false
+});
 
 // Cache utility functions
 function saveTelemetryToCache(data: TelemetryData) {

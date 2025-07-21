@@ -1,62 +1,552 @@
 "use client"
 
-import { useEffect, useState, Suspense } from "react"
+import { useEffect, useState, Suspense, useCallback } from "react"
 import dynamic from "next/dynamic"
+import { useInView } from "react-intersection-observer"
 import Sidebar from "@/components/layout/Sidebar"
 import Header from "@/components/layout/Header"
 import MobileNav from "@/components/layout/MobileNav"
 import { OpenF1Service } from "@/lib/api/openf1"
 import type { OpenF1WeatherData } from "@/lib/api/types"
 import LoadingSpinner from "@/components/ui/LoadingSpinner"
+import { TelemetryProvider } from "@/context/TelemetryDataContext"
+import { Card } from "@/components/ui/card"
+import { Button } from "@/components/ui/button"
+import { ChevronDown, ChevronUp, Settings, BarChart3, Map, CloudSun, User } from "lucide-react"
+import { motion, AnimatePresence } from "framer-motion"
 
-// Dynamically import heavy components
-const Dashboard = dynamic(() => import("@/components/Dashboard"), {
-  loading: () => <DashboardSkeleton />,
-  ssr: false // Disable server-side rendering for this component
+// Enhanced dynamic imports with loading states and error boundaries
+const TelemetryDisplay = dynamic(() => import("@/components/TelemetryDisplay"), {
+  loading: () => <TelemetryLoadingSkeleton />,
+  ssr: false
 })
 
-function DashboardSkeleton() {
+const TrackMap = dynamic(() => import("@/components/TrackMap"), {
+  loading: () => <MapLoadingSkeleton />,
+  ssr: false
+})
+
+const WeatherOverlay = dynamic(() => import("@/components/WeatherOverlay"), {
+  loading: () => <WeatherLoadingSkeleton />,
+  ssr: false
+})
+
+const DriverPanel = dynamic(() => import("@/components/DriverPanel"), {
+  loading: () => <DriverLoadingSkeleton />,
+  ssr: false
+})
+
+const LapTimeComparisonChart = dynamic(() => import("@/components/LapTimeComparisonChart"), {
+  loading: () => <ChartLoadingSkeleton title="Lap Time Comparison" />,
+  ssr: false
+})
+
+const TelemetryTable = dynamic(() => import("@/components/TelemetryTable"), {
+  loading: () => <TableLoadingSkeleton />,
+  ssr: false
+})
+
+const PerformanceAnalyticsDashboard = dynamic(() => import("@/components/PerformanceAnalyticsDashboard"), {
+  loading: () => <AnalyticsLoadingSkeleton />,
+  ssr: false
+})
+
+const TireStrategyChart = dynamic(() => import("@/components/TireStrategyChart"), {
+  loading: () => <ChartLoadingSkeleton title="Tire Strategy" />,
+  ssr: false
+})
+
+const DeltaTimeChart = dynamic(() => import("@/components/DeltaTimeChart"), {
+  loading: () => <ChartLoadingSkeleton title="Delta Time Analysis" />,
+  ssr: false
+})
+
+const SessionDetailDialog = dynamic(() => import("@/components/SessionDetailDialog"), {
+  loading: () => <div className="w-full h-96 bg-muted animate-pulse rounded" />,
+  ssr: false
+})
+
+// Enhanced loading skeletons with better UX
+function TelemetryLoadingSkeleton() {
   return (
-    <div className="grid grid-cols-1 gap-3 sm:gap-4 md:gap-6">
-      <div className="col-span-1 h-40 bg-muted/30 rounded-md animate-pulse"></div>
-      <div className="grid grid-cols-1 md:grid-cols-2 gap-3 sm:gap-4 md:gap-6 col-span-1">
-        <div className="h-64 bg-muted/30 rounded-md animate-pulse"></div>
-        <div className="h-64 bg-muted/30 rounded-md animate-pulse"></div>
+    <Card className="p-6">
+      <div className="space-y-4">
+        <div className="flex items-center justify-between">
+          <div className="flex items-center space-x-2">
+            <div className="w-6 h-6 rounded-full bg-muted animate-pulse" />
+            <div className="h-6 w-32 bg-muted rounded animate-pulse" />
+          </div>
+          <div className="w-16 h-8 bg-muted rounded animate-pulse" />
+        </div>
+        <div className="grid grid-cols-2 md:grid-cols-3 gap-4">
+          {Array.from({ length: 6 }).map((_, i) => (
+            <div key={i} className="space-y-2">
+              <div className="w-8 h-8 bg-muted rounded-full animate-pulse mx-auto" />
+              <div className="h-8 w-16 bg-muted rounded animate-pulse mx-auto" />
+              <div className="h-4 w-12 bg-muted rounded animate-pulse mx-auto" />
+            </div>
+          ))}
+        </div>
       </div>
-      <div className="col-span-1 h-80 bg-muted/30 rounded-md animate-pulse"></div>
+    </Card>
+  )
+}
+
+function MapLoadingSkeleton() {
+  return (
+    <Card className="p-6">
+      <div className="space-y-4">
+        <div className="flex items-center justify-between">
+          <div className="flex items-center space-x-2">
+            <Map className="w-6 h-6 text-muted-foreground animate-pulse" />
+            <div className="h-6 w-24 bg-muted rounded animate-pulse" />
+          </div>
+          <div className="flex space-x-2">
+            <div className="w-8 h-8 bg-muted rounded animate-pulse" />
+            <div className="w-8 h-8 bg-muted rounded animate-pulse" />
+          </div>
+        </div>
+        <div className="aspect-video bg-muted rounded-lg animate-pulse flex items-center justify-center">
+          <div className="text-center space-y-2">
+            <div className="w-12 h-12 bg-muted-foreground/20 rounded-full animate-spin mx-auto" />
+            <p className="text-sm text-muted-foreground">Loading track layout...</p>
+          </div>
+        </div>
+      </div>
+    </Card>
+  )
+}
+
+function WeatherLoadingSkeleton() {
+  return (
+    <Card className="p-6">
+      <div className="space-y-4">
+        <div className="flex items-center space-x-2">
+          <CloudSun className="w-6 h-6 text-muted-foreground animate-pulse" />
+          <div className="h-6 w-28 bg-muted rounded animate-pulse" />
+        </div>
+        <div className="grid grid-cols-2 gap-4">
+          {Array.from({ length: 4 }).map((_, i) => (
+            <div key={i} className="space-y-2">
+              <div className="h-4 w-20 bg-muted rounded animate-pulse" />
+              <div className="h-6 w-16 bg-muted rounded animate-pulse" />
+            </div>
+          ))}
+        </div>
+        <div className="space-y-2">
+          <div className="h-4 w-24 bg-muted rounded animate-pulse" />
+          <div className="h-2 w-full bg-muted rounded animate-pulse" />
+        </div>
+      </div>
+    </Card>
+  )
+}
+
+function DriverLoadingSkeleton() {
+  return (
+    <Card className="p-6">
+      <div className="space-y-4">
+        <div className="flex items-center justify-between">
+          <div className="flex items-center space-x-2">
+            <User className="w-6 h-6 text-muted-foreground animate-pulse" />
+            <div className="h-6 w-32 bg-muted rounded animate-pulse" />
+          </div>
+          <div className="w-8 h-8 bg-muted rounded animate-pulse" />
+        </div>
+        <div className="space-y-3">
+          {Array.from({ length: 3 }).map((_, i) => (
+            <div key={i} className="flex items-center space-x-3">
+              <div className="w-6 h-6 bg-muted rounded-full animate-pulse" />
+              <div className="flex-1 space-y-1">
+                <div className="h-4 w-3/4 bg-muted rounded animate-pulse" />
+                <div className="h-3 w-1/2 bg-muted rounded animate-pulse" />
+              </div>
+            </div>
+          ))}
+        </div>
+      </div>
+    </Card>
+  )
+}
+
+function ChartLoadingSkeleton({ title }: { title: string }) {
+  return (
+    <Card className="p-6">
+      <div className="space-y-4">
+        <div className="flex items-center justify-between">
+          <div className="flex items-center space-x-2">
+            <BarChart3 className="w-6 h-6 text-muted-foreground animate-pulse" />
+            <div className="h-6 w-40 bg-muted rounded animate-pulse" />
+          </div>
+          <div className="flex space-x-2">
+            <div className="w-20 h-8 bg-muted rounded animate-pulse" />
+            <div className="w-16 h-8 bg-muted rounded animate-pulse" />
+          </div>
+        </div>
+        <div className="h-64 bg-muted rounded-lg animate-pulse flex items-center justify-center">
+          <div className="text-center space-y-2">
+            <div className="w-8 h-8 bg-muted-foreground/20 rounded-full animate-spin mx-auto" />
+            <p className="text-sm text-muted-foreground">Loading {title.toLowerCase()}...</p>
+          </div>
+        </div>
+      </div>
+    </Card>
+  )
+}
+
+function TableLoadingSkeleton() {
+  return (
+    <Card className="p-6">
+      <div className="space-y-4">
+        <div className="flex items-center justify-between">
+          <div className="h-6 w-32 bg-muted rounded animate-pulse" />
+          <div className="flex space-x-2">
+            <div className="w-24 h-8 bg-muted rounded animate-pulse" />
+            <div className="w-16 h-8 bg-muted rounded animate-pulse" />
+          </div>
+        </div>
+        <div className="space-y-2">
+          <div className="grid grid-cols-6 gap-4 pb-2 border-b">
+            {Array.from({ length: 6 }).map((_, i) => (
+              <div key={i} className="h-4 bg-muted rounded animate-pulse" />
+            ))}
+          </div>
+          {Array.from({ length: 8 }).map((_, i) => (
+            <div key={i} className="grid grid-cols-6 gap-4 py-2">
+              {Array.from({ length: 6 }).map((_, j) => (
+                <div key={j} className="h-4 bg-muted/50 rounded animate-pulse" />
+              ))}
+            </div>
+          ))}
+        </div>
+      </div>
+    </Card>
+  )
+}
+
+function AnalyticsLoadingSkeleton() {
+  return (
+    <div className="space-y-6">
+      <div className="flex flex-wrap gap-4">
+        {Array.from({ length: 4 }).map((_, i) => (
+          <div key={i} className="w-32 h-10 bg-muted rounded animate-pulse" />
+        ))}
+      </div>
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+        {Array.from({ length: 2 }).map((_, i) => (
+          <ChartLoadingSkeleton key={i} title="Analytics Chart" />
+        ))}
+      </div>
     </div>
   )
 }
 
-export default function LiveDashboardPage() {
-  const [weather, setWeather] = useState<OpenF1WeatherData | null>(null)
-  const sessionKey = "latest"
-  const driverNumber = 1 // Default driver
-  const driverNumbers = [1, 16, 44] // Default selection of drivers
+// Dashboard error boundary
+function DashboardErrorBoundary({ children, fallback }: { 
+  children: React.ReactNode; 
+  fallback: React.ReactNode 
+}) {
+  const [hasError, setHasError] = useState(false)
 
   useEffect(() => {
-    const openf1 = new OpenF1Service("https://api.openf1.org/v1")
+    const handleError = () => setHasError(true)
+    window.addEventListener('error', handleError)
+    return () => window.removeEventListener('error', handleError)
+  }, [])
+
+  if (hasError) {
+    return (
+      <Card className="p-6">
+        <div className="text-center space-y-4">
+          <div className="text-destructive text-lg font-semibold">
+            Something went wrong
+          </div>
+          <p className="text-muted-foreground">
+            This component failed to load. Please try refreshing the page.
+          </p>
+          <Button onClick={() => setHasError(false)} variant="outline">
+            Try Again
+          </Button>
+        </div>
+      </Card>
+    )
+  }
+
+  return <>{children}</>
+}
+
+// Enhanced dashboard component with progressive loading
+function DashboardContent({ weather, sessionKey, driverNumber, driverNumbers }: {
+  weather: OpenF1WeatherData | null;
+  sessionKey: string;
+  driverNumber: number;
+  driverNumbers: number[];
+}) {
+  const [expandedSections, setExpandedSections] = useState({
+    core: true,
+    analytics: false,
+    advanced: false
+  })
+
+  // Intersection observers for progressive loading
+  const { ref: analyticsRef, inView: analyticsInView } = useInView({
+    threshold: 0.1,
+    triggerOnce: true
+  })
+
+  const { ref: advancedRef, inView: advancedInView } = useInView({
+    threshold: 0.1,
+    triggerOnce: true
+  })
+
+  const toggleSection = useCallback((section: keyof typeof expandedSections) => {
+    setExpandedSections(prev => ({ ...prev, [section]: !prev[section] }))
+  }, [])
+
+  return (
+    <div className="space-y-6">
+      {/* Core Dashboard Section - Always Loaded */}
+      <section className="space-y-4">
+        <div className="flex items-center justify-between">
+          <h2 className="text-xl font-semibold font-formula1">Live Telemetry</h2>
+          <Button
+            variant="ghost"
+            size="sm"
+            onClick={() => toggleSection('core')}
+            className="flex items-center gap-2"
+          >
+            {expandedSections.core ? <ChevronUp className="w-4 h-4" /> : <ChevronDown className="w-4 h-4" />}
+            {expandedSections.core ? 'Collapse' : 'Expand'}
+          </Button>
+        </div>
+
+        <AnimatePresence>
+          {expandedSections.core && (
+            <motion.div
+              initial={{ height: 0, opacity: 0 }}
+              animate={{ height: 'auto', opacity: 1 }}
+              exit={{ height: 0, opacity: 0 }}
+              transition={{ duration: 0.3 }}
+              className="overflow-hidden"
+            >
+              <div className="grid grid-cols-1 gap-4">
+                {/* Primary Telemetry Display */}
+                <DashboardErrorBoundary fallback={<TelemetryLoadingSkeleton />}>
+                  <Suspense fallback={<TelemetryLoadingSkeleton />}>
+                    <TelemetryDisplay fallbackApiUrl="/api/telemetry/latest" />
+                  </Suspense>
+                </DashboardErrorBoundary>
+
+                {/* Track and Driver Information */}
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                  <DashboardErrorBoundary fallback={<MapLoadingSkeleton />}>
+                    <Suspense fallback={<MapLoadingSkeleton />}>
+                      <TrackMap />
+                    </Suspense>
+                  </DashboardErrorBoundary>
+
+                  <DashboardErrorBoundary fallback={<DriverLoadingSkeleton />}>
+                    <Suspense fallback={<DriverLoadingSkeleton />}>
+                      <DriverPanel />
+                    </Suspense>
+                  </DashboardErrorBoundary>
+                </div>
+
+                {/* Weather Information */}
+                <DashboardErrorBoundary fallback={<WeatherLoadingSkeleton />}>
+                  <Suspense fallback={<WeatherLoadingSkeleton />}>
+                    <WeatherOverlay />
+                  </Suspense>
+                </DashboardErrorBoundary>
+              </div>
+            </motion.div>
+          )}
+        </AnimatePresence>
+      </section>
+
+      {/* Analytics Section - Lazy Loaded */}
+      <section ref={analyticsRef} className="space-y-4">
+        <div className="flex items-center justify-between">
+          <h2 className="text-xl font-semibold font-formula1 flex items-center gap-2">
+            <BarChart3 className="w-5 h-5" />
+            Performance Analytics
+          </h2>
+          <Button
+            variant="ghost"
+            size="sm"
+            onClick={() => toggleSection('analytics')}
+            className="flex items-center gap-2"
+          >
+            {expandedSections.analytics ? <ChevronUp className="w-4 h-4" /> : <ChevronDown className="w-4 h-4" />}
+            {expandedSections.analytics ? 'Collapse' : 'Expand'}
+          </Button>
+        </div>
+
+        <AnimatePresence>
+          {expandedSections.analytics && (
+            <motion.div
+              initial={{ height: 0, opacity: 0 }}
+              animate={{ height: 'auto', opacity: 1 }}
+              exit={{ height: 0, opacity: 0 }}
+              transition={{ duration: 0.3 }}
+              className="overflow-hidden"
+            >
+              {analyticsInView && (
+                <div className="space-y-4">
+                  <DashboardErrorBoundary fallback={<ChartLoadingSkeleton title="Lap Time Comparison" />}>
+                    <Suspense fallback={<ChartLoadingSkeleton title="Lap Time Comparison" />}>
+                      <LapTimeComparisonChart
+                        sessionKey={sessionKey}
+                        driverNumbers={driverNumbers}
+                      />
+                    </Suspense>
+                  </DashboardErrorBoundary>
+
+                  <DashboardErrorBoundary fallback={<AnalyticsLoadingSkeleton />}>
+                    <Suspense fallback={<AnalyticsLoadingSkeleton />}>
+                      <PerformanceAnalyticsDashboard 
+                        sessionKey={sessionKey}
+                      />
+                    </Suspense>
+                  </DashboardErrorBoundary>
+                </div>
+              )}
+            </motion.div>
+          )}
+        </AnimatePresence>
+      </section>
+
+      {/* Advanced Section - Lazy Loaded */}
+      <section ref={advancedRef} className="space-y-4">
+        <div className="flex items-center justify-between">
+          <h2 className="text-xl font-semibold font-formula1 flex items-center gap-2">
+            <Settings className="w-5 h-5" />
+            Advanced Data
+          </h2>
+          <Button
+            variant="ghost"
+            size="sm"
+            onClick={() => toggleSection('advanced')}
+            className="flex items-center gap-2"
+          >
+            {expandedSections.advanced ? <ChevronUp className="w-4 h-4" /> : <ChevronDown className="w-4 h-4" />}
+            {expandedSections.advanced ? 'Collapse' : 'Expand'}
+          </Button>
+        </div>
+
+        <AnimatePresence>
+          {expandedSections.advanced && (
+            <motion.div
+              initial={{ height: 0, opacity: 0 }}
+              animate={{ height: 'auto', opacity: 1 }}
+              exit={{ height: 0, opacity: 0 }}
+              transition={{ duration: 0.3 }}
+              className="overflow-hidden"
+            >
+              {advancedInView && (
+                <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+                  <DashboardErrorBoundary fallback={<TableLoadingSkeleton />}>
+                    <Suspense fallback={<TableLoadingSkeleton />}>
+                      <TelemetryTable
+                        title="Real-time Data Stream"
+                        maxHeight={400}
+                        virtualScrollOptions={{
+                          itemSize: 35,
+                          overscanCount: 5,
+                          useVariableSize: false,
+                          enableSelection: true,
+                          enableFiltering: true
+                        }}
+                      />
+                    </Suspense>
+                  </DashboardErrorBoundary>
+
+                  <DashboardErrorBoundary fallback={<ChartLoadingSkeleton title="Tire Strategy" />}>
+                    <Suspense fallback={<ChartLoadingSkeleton title="Tire Strategy" />}>
+                      <TireStrategyChart
+                        sessionKey={sessionKey}
+                        driverNumber={driverNumber}
+                      />
+                    </Suspense>
+                  </DashboardErrorBoundary>
+                </div>
+              )}
+            </motion.div>
+          )}
+        </AnimatePresence>
+      </section>
+    </div>
+  )
+}
+
+// Main dashboard page component
+export default function LiveDashboardPage() {
+  const [weather, setWeather] = useState<OpenF1WeatherData | null>(null)
+  const [isInitialLoading, setIsInitialLoading] = useState(true)
+  const sessionKey = "latest"
+  const driverNumber = 1
+  const driverNumbers = [1, 16, 44, 63]
+
+  // Enhanced weather fetching with error handling
+  const fetchWeather = useCallback(async () => {
+    try {
+      const openf1 = new OpenF1Service("https://api.openf1.org/v1")
+      const data = await openf1.getWeather(sessionKey)
+      
+      if (Array.isArray(data) && data.length > 0) {
+        setWeather(data[data.length - 1])
+      }
+    } catch (error) {
+      console.warn('Failed to fetch weather data:', error)
+      setWeather(null)
+    }
+  }, [sessionKey])
+
+  useEffect(() => {
     let mounted = true
     
-    async function fetchWeather() {
-      try {
-        const data = await openf1.getWeather(sessionKey)
-        if (mounted && Array.isArray(data) && data.length > 0) {
-          setWeather(data[data.length - 1])
-        }
-      } catch {
-        setWeather(null)
+    const initializeData = async () => {
+      await fetchWeather()
+      if (mounted) {
+        setIsInitialLoading(false)
       }
     }
+
+    initializeData()
     
-    fetchWeather()
-    const interval = setInterval(fetchWeather, 10000)
+    // Set up periodic weather updates
+    const weatherInterval = setInterval(fetchWeather, 30000) // Every 30 seconds
     
     return () => {
       mounted = false
-      clearInterval(interval)
+      clearInterval(weatherInterval)
     }
-  }, [sessionKey])
+  }, [fetchWeather])
+
+  if (isInitialLoading) {
+    return (
+      <>
+        <Header />
+        <div className="flex flex-col md:flex-row min-h-screen">
+          <Sidebar />
+          <div className="block md:hidden">
+            <MobileNav />
+          </div>
+          <main className="flex-1 p-2 sm:p-4 md:p-6 w-full max-w-full overflow-x-hidden">
+            <div className="flex flex-col items-center justify-center min-h-[60vh]">
+              <LoadingSpinner size="lg" />
+              <h2 className="text-xl font-bold font-formula1 mt-4 mb-2">
+                Initializing Dashboard
+              </h2>
+              <p className="text-muted-foreground text-center max-w-md">
+                Setting up your F1 telemetry dashboard with the latest data...
+              </p>
+            </div>
+          </main>
+        </div>
+      </>
+    )
+  }
 
   return (
     <>
@@ -66,15 +556,16 @@ export default function LiveDashboardPage() {
         <div className="block md:hidden">
           <MobileNav />
         </div>
-        <main className="flex-1 p-2 sm:p-4 md:p-6 w-full max-w-full overflow-hidden">
-          <h1 className="sr-only">F1 Telemetry Dashboard</h1>
-          <Suspense fallback={<DashboardSkeleton />}>
-            <Dashboard
+        <main className="flex-1 p-2 sm:p-4 md:p-6 w-full max-w-full overflow-x-hidden">
+          <TelemetryProvider initialSessionKey={sessionKey}>
+            <h1 className="sr-only">F1 Telemetry Dashboard</h1>
+            <DashboardContent
+              weather={weather}
               sessionKey={sessionKey}
               driverNumber={driverNumber}
               driverNumbers={driverNumbers}
             />
-          </Suspense>
+          </TelemetryProvider>
         </main>
       </div>
     </>

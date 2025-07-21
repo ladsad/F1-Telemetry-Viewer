@@ -289,6 +289,20 @@ export class OpenF1Service {
         // Add more as needed
         return null
     }
+
+    // Add this method to fetch session events
+    async getEvents(sessionKey: string){
+        try {
+            const response = await fetch(`${this.baseUrl}/events?session_key=${sessionKey}`);
+            if (!response.ok) {
+                throw new Error(`Error fetching events: ${response.status}`);
+            }
+            return await response.json();
+        } catch (error) {
+            console.error("Failed to fetch events:", error);
+            return [];
+        }
+    }
 }
 
 // Utility to poll for weather and detect alerts (for use in WeatherAlert)

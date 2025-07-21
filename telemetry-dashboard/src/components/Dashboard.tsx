@@ -15,12 +15,12 @@ const TrackMap = dynamic(() => import("@/components/TrackMap"), {
   ssr: false
 })
 
-const WeatherOverlay = dynamic(() => import("@/components/WeatherOverlay").then(mod => ({ default: mod.WeatherOverlay })), {
+const WeatherOverlay = dynamic(() => import("@/components/WeatherOverlay"), {
   loading: () => <div className="h-48 bg-muted/30 rounded-md animate-pulse"></div>,
   ssr: false
 })
 
-const DriverPanel = dynamic(() => import("@/components/DriverPanel").then(mod => ({ default: mod.DriverPanel })), {
+const DriverPanel = dynamic(() => import("@/components/DriverPanel"), {
   loading: () => <div className="h-64 bg-muted/30 rounded-md animate-pulse"></div>,
   ssr: false
 })

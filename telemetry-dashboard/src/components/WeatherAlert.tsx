@@ -1,71 +1,57 @@
 "use client"
 
-import { useEffect, useRef, useState } from "react"
-import { AlertTriangle, CloudRain, Wind, Thermometer } from "lucide-react"
-import type { OpenF1WeatherAlert, OpenF1WeatherData } from "@/lib/api/types"
+import React from 'react';
+import { AlertCircle, CloudRain, Sun, Wind } from 'lucide-react';
+import { motion } from 'framer-motion';
+import { Alert, AlertDescription } from '@/components/ui/alert';
+import { WeatherData } from '@/types';
 
-type WeatherAlertProps = {
-  sessionKey: string
-  latestWeather: OpenF1WeatherData | null
-}
-
-const DEFAULT_THRESHOLDS = {
-  rainfall: 0.1, // mm
-  airTempSpike: 3, // °C
-  windGust: 10, // km/h
-}
-
-export default function WeatherAlert({ sessionKey, latestWeather }: WeatherAlertProps) {
-  const [alert, setAlert] = useState<OpenF1WeatherAlert | null>(null)
-  const prevWeather = useRef<OpenF1WeatherData | null>(null)
-
-  useEffect(() => {
-    if (!latestWeather) return
-    const prev = prevWeather.current
-    let newAlert: OpenF1WeatherAlert | null = null
-
-    if (prev) {
-      // Rain start
-      if (prev.rainfall < DEFAULT_THRESHOLDS.rainfall && latestWeather.rainfall >= DEFAULT_THRESHOLDS.rainfall) {
-        newAlert = {
-          type: "rain_start",
-          message: "Rain has started on track!",
-          icon: <CloudRain className="text-blue-500 inline mr-1" />,
-        }
-      }
-      // Air temp spike
-      else if (latestWeather.air_temperature - prev.air_temperature >= DEFAULT_THRESHOLDS.airTempSpike) {
-        newAlert = {
-          type: "temp_spike",
-          message: `Air temperature spiked to ${latestWeather.air_temperature}°C!`,
-          icon: <Thermometer className="text-orange-500 inline mr-1" />,
-        }
-      }
-      // Wind gust
-      else if (latestWeather.wind_speed - prev.wind_speed >= DEFAULT_THRESHOLDS.windGust) {
-        newAlert = {
-          type: "wind_gust",
-          message: `Wind gust: ${latestWeather.wind_speed} km/h (${latestWeather.wind_direction})`,
-          icon: <Wind className="text-cyan-500 inline mr-1" />,
-        }
-      }
-    }
-    prevWeather.current = latestWeather
-    setAlert(newAlert)
-    // Auto-clear alert after 10s
-    if (newAlert) {
-      const timeout = setTimeout(() => setAlert(null), 10000)
-      return () => clearTimeout(timeout)
-    }
-  }, [latestWeather])
-
-  if (!alert) return null
-
+// Change the prop name from weatherData to weather
+export default function WeatherAlert({ weather }: { weather: WeatherData }) {
+  // Extract relevant weather data
+  const { rainfall = 0, air_temperature = 0, wind_speed = 0 } = weather || {};
+  
+  // Determine if we should show a weather alert
+  const shouldShowAlert = rainfall > 2 || air_temperature > 35 || air_temperature < 10 || wind_speed > 30;
+  
+  if (!shouldShowAlert) {
+    return null;
+  }
+  
+  // Determine alert type and message
+  let icon = <AlertCircle className="h-4 w-4" />;
+  let message = "";
+  let colorClass = "bg-yellow-500/10 text-yellow-700 dark:text-yellow-500";
+  
+  if (rainfall > 2) {
+    icon = <CloudRain className="h-4 w-4" />;
+    message = `Heavy rain (${rainfall}mm) affecting track conditions`;
+    colorClass = "bg-blue-500/10 text-blue-700 dark:text-blue-400";
+  } else if (air_temperature > 35) {
+    icon = <Sun className="h-4 w-4" />;
+    message = `High temperature (${air_temperature}°C) could affect tire degradation`;
+    colorClass = "bg-orange-500/10 text-orange-700 dark:text-orange-400";
+  } else if (air_temperature < 10) {
+    icon = <Sun className="h-4 w-4" />;
+    message = `Low temperature (${air_temperature}°C) could make tire warming difficult`;
+    colorClass = "bg-blue-500/10 text-blue-700 dark:text-blue-400";
+  } else if (wind_speed > 30) {
+    icon = <Wind className="h-4 w-4" />;
+    message = `Strong winds (${wind_speed}km/h) may affect aerodynamics`;
+    colorClass = "bg-purple-500/10 text-purple-700 dark:text-purple-400";
+  }
+  
   return (
-    <div className="mb-2 px-4 py-2 rounded bg-yellow-100 dark:bg-yellow-900 flex items-center gap-2 shadow">
-      <AlertTriangle className="text-yellow-500" />
-      {alert.icon}
-      <span className="font-semibold">{alert.message}</span>
-    </div>
-  )
+    <motion.div 
+      initial={{ opacity: 0, y: -10 }}
+      animate={{ opacity: 1, y: 0 }}
+      transition={{ duration: 0.3 }}
+      className="mb-4"
+    >
+      <Alert className={`${colorClass} flex items-center`}>
+        <div className="mr-2">{icon}</div>
+        <AlertDescription>{message}</AlertDescription>
+      </Alert>
+    </motion.div>
+  );
 }

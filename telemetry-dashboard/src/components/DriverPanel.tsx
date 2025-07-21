@@ -14,7 +14,9 @@ import { StatusIndicatorProps, DriverPanelProps } from "@/types";
 // Create a memoized status component with proper typing
 const StatusIndicator = React.memo(({ label, value, icon, color = "" }: StatusIndicatorProps) => (
   <div className="flex items-center gap-2 tap-target p-2">
-    {React.cloneElement(icon, { className: `w-6 h-6 ${color} flex-shrink-0` })}
+    {React.cloneElement(icon as React.ReactElement<{ className?: string }>, { 
+      className: `w-6 h-6 ${color} flex-shrink-0` 
+    })}
     <span className="font-semibold text-responsive-base">{value}</span>
     <span className="text-responsive-xs text-muted-foreground">{label}</span>
   </div>
@@ -30,7 +32,7 @@ const compoundColors: Record<string, string> = {
   "UNKNOWN": "bg-gray-300"
 };
 
-export function React.memo(DriverPanel({ driverNumber, sessionKey, showDetails = true }: DriverPanelProps = {}) {
+function DriverPanel({ driverNumber, sessionKey, showDetails = true }: DriverPanelProps = {}) {
   const { colors } = useTheme();
   const [expanded, setExpanded] = useState(false);
   
@@ -39,7 +41,6 @@ export function React.memo(DriverPanel({ driverNumber, sessionKey, showDetails =
     telemetryState, 
     updateDriverStatus,
     selectedDriverNumber,
-    sessionKey: contextSessionKey,
     connectionStatus
   } = useTelemetry();
   
@@ -184,4 +185,6 @@ export function React.memo(DriverPanel({ driverNumber, sessionKey, showDetails =
       </CardContent>
     </Card>
   );
-});
+}
+
+export default React.memo(DriverPanel);

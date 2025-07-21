@@ -10,6 +10,8 @@ import { Clock, ArrowUpDown, Download } from "lucide-react"
 import AnimatedButton from "@/components/AnimatedButton"
 import ConnectionStatusIndicator from "@/components/ConnectionStatusIndicator"
 import { Loader2 } from "lucide-react"
+import { FixedSizeList as List } from 'react-window';
+import AutoSizer from 'react-virtualized-auto-sizer';
 
 type LapTimeComparisonChartProps = {
   sessionKey: string
@@ -264,6 +266,54 @@ export default function LapTimeComparisonChart({
                   ))}
               </LineChart>
             </ResponsiveContainer>
+          </div>
+        )}
+        
+        {/* Virtualized lap data table */}
+        {!loading && !error && chartData.length > 0 && (
+          <div className="mt-6 border rounded">
+            <div className="p-2 bg-muted font-semibold text-sm font-formula1">
+              Raw Lap Time Data
+            </div>
+            <div className="h-64 w-full">
+              <AutoSizer>
+                {({ height, width }) => (
+                  <List
+                    className="virtualized-list"
+                    height={height}
+                    itemCount={chartData.length}
+                    itemSize={35}
+                    width={width}
+                  >
+                    {({ index, style }) => {
+                      const lap = chartData[index];
+                      return (
+                        <div 
+                          className={`flex items-center px-2 py-1 ${
+                            index % 2 === 0 ? 'bg-muted/30' : ''
+                          }`}
+                          style={style}
+                        >
+                          <div className="w-16 font-formula1">Lap {lap.lap}</div>
+                          {series
+                            .filter(s => activeDrivers.includes(s.driverNumber))
+                            .map((s) => (
+                              <div 
+                                key={s.name} 
+                                className="flex-1 text-sm text-right px-2"
+                                style={{ color: s.color }}
+                              >
+                                {lap[s.name] ? lap[s.name].toFixed(3) + 's' : '-'}
+                              </div>
+                            ))
+                          }
+                        </div>
+                      );
+                    }}
+                  </List>
+                )}
+              </AutoSizer>
+            </div>
           </div>
         )}
       </CardContent>

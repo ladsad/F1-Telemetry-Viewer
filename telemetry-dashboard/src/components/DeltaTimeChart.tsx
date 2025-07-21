@@ -6,6 +6,8 @@ import { OpenF1Service } from "@/lib/api/openf1"
 import type { OpenF1LapTime, OpenF1DeltaTime, OpenF1DriverInfo } from "@/lib/api/types"
 import { LineChart, Line, XAxis, YAxis, Tooltip, Legend, ResponsiveContainer } from "recharts"
 import { useTheme } from "@/components/ThemeProvider"
+import { FixedSizeList as List } from 'react-window';
+import AutoSizer from 'react-virtualized-auto-sizer';
 
 type DeltaTimeChartProps = {
   sessionKey: string
@@ -122,6 +124,54 @@ export default function DeltaTimeChart({
               ))}
             </LineChart>
           </ResponsiveContainer>
+        )}
+        {!loading && !error && chartData.length > 0 && (
+          <div className="mt-4 border rounded">
+            <div className="p-2 bg-muted font-semibold text-sm">Delta Times (seconds)</div>
+            <div className="h-56 w-full">
+              <AutoSizer>
+                {({ height, width }) => (
+                  <List
+                    className="virtualized-list"
+                    height={height}
+                    itemCount={chartData.length}
+                    itemSize={35}
+                    width={width}
+                  >
+                    {({ index, style }) => {
+                      const lap = chartData[index];
+                      return (
+                        <div 
+                          className={`flex items-center px-2 py-1 ${
+                            index % 2 === 0 ? 'bg-muted/30' : ''
+                          }`}
+                          style={style}
+                        >
+                          <div className="w-16 font-semibold">Lap {lap.lap}</div>
+                          {series.map((s) => (
+                            <div 
+                              key={s.name} 
+                              className={`flex-1 text-sm text-right px-2 ${
+                                lap[s.name] < 0 
+                                  ? 'text-green-500' 
+                                  : lap[s.name] > 0 
+                                    ? 'text-red-500' 
+                                    : ''
+                              }`}
+                            >
+                              {lap[s.name] != null 
+                                ? (lap[s.name] > 0 ? '+' : '') + lap[s.name].toFixed(3) 
+                                : '-'}
+                            </div>
+                          ))}
+                        </div>
+                      );
+                    }}
+                  </List>
+                )}
+              </AutoSizer>
+            </div>
+          </div>
         )}
       </CardContent>
     </Card>

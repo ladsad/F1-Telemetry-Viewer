@@ -4,6 +4,8 @@ import { useEffect, useState } from "react"
 import { Card, CardHeader, CardTitle, CardContent } from "@/components/ui/card"
 import { OpenF1Service } from "@/lib/api/openf1"
 import HistoricSessionSelector from "@/components/HistoricSessionSelector"
+import { FixedSizeList as List } from 'react-window';
+import AutoSizer from 'react-virtualized-auto-sizer';
 
 type Session = {
   session_key: string
@@ -130,6 +132,61 @@ export default function SessionComparison() {
               })}
             </div>
             {/* You can add more metrics here */}
+          </div>
+        )}
+        {selected.length > 0 && !loading && (
+          <div className="mt-6">
+            <div className="font-semibold mb-2">Telemetry Data Comparison</div>
+            <div className="h-80 border rounded">
+              <AutoSizer>
+                {({ height, width }) => (
+                  <List
+                    className="virtualized-list"
+                    height={height}
+                    itemCount={
+                      Object.values(telemetry).reduce(
+                        (max, data) => Math.max(max, data?.length || 0), 
+                        0
+                      )
+                    }
+                    itemSize={40}
+                    width={width}
+                  >
+                    {({ index, style }) => (
+                      <div 
+                        className={`flex items-center px-2 ${
+                          index % 2 === 0 ? 'bg-muted/30' : ''
+                        }`}
+                        style={style}
+                      >
+                        <div className="w-12 font-semibold text-sm">{index + 1}</div>
+                        {selected.map(session => {
+                          const data = telemetry[session.session_key] || [];
+                          const item = data[index];
+                          return (
+                            <div 
+                              key={session.session_key}
+                              className="flex-1 flex flex-col px-2"
+                            >
+                              {item ? (
+                                <>
+                                  <div className="text-sm">{item.speed?.toFixed(1)} km/h</div>
+                                  <div className="text-xs text-muted-foreground">
+                                    T: {item.throttle?.toFixed(0)}% B: {item.brake?.toFixed(0)}%
+                                  </div>
+                                </>
+                              ) : (
+                                <span className="text-xs text-muted-foreground">No data</span>
+                              )}
+                            </div>
+                          );
+                        })}
+                      </div>
+                    )}
+                  </List>
+                )}
+              </AutoSizer>
+            </div>
           </div>
         )}
       </CardContent>

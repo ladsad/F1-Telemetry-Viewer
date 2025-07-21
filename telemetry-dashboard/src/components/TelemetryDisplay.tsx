@@ -1,6 +1,6 @@
 "use client"
 
-import { useEffect, useState, useCallback } from "react";
+import React, { useEffect, useState, useCallback, useMemo } from "react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Gauge, Zap, Activity, Settings, TrendingUp, RefreshCw, AlertCircle } from "lucide-react";
 import { motion, AnimatePresence } from "framer-motion";
@@ -33,6 +33,33 @@ function loadTelemetryFromCache(): any {
     return null;
   }
 }
+
+// Memoize the MetricDisplay component to prevent unnecessary renders
+const MetricDisplay = React.memo(function MetricDisplay({ icon, value, unit, label, prevValue, isOffline = false }) {
+  // Determine if the value has changed for animation
+  const hasChanged = prevValue !== undefined && 
+    Math.abs(parseFloat(prevValue) - parseFloat(value)) > (label === "Speed" ? 2 : 5);
+  
+  return (
+    <div className={`flex flex-col items-center justify-center tap-target p-responsive-sm ${
+      isOffline ? 'opacity-60' : ''
+    }`}>
+      <div className="mb-1" style={{ minHeight: '24px' }}>{icon}</div>
+      <motion.div 
+        className="metric-value"
+        animate={hasChanged && !isOffline ? { scale: [1, 1.1, 1] } : {}}
+        transition={{ duration: 0.3 }}
+      >
+        {value}
+        <span className="ml-1 text-responsive-xs">{unit}</span>
+      </motion.div>
+      <div className="metric-label">{label}</div>
+      {isOffline && (
+        <span className="text-xs text-muted-foreground mt-1">Cached</span>
+      )}
+    </div>
+  );
+});
 
 export default function TelemetryDisplay(props: TelemetryDisplayProps) {
   const { colors } = useTheme();
@@ -110,31 +137,8 @@ export default function TelemetryDisplay(props: TelemetryDisplayProps) {
     };
   }, [props.fallbackApiUrl, connectionStatus.telemetry, props.refreshIntervalMs]);
 
-  // Touch-friendly refresh handler
-  const handleRefresh = useCallback(() => {
-    setIsRefreshing(true);
-    
-    // Manual refresh logic
-    if (props.fallbackApiUrl) {
-      fetch(props.fallbackApiUrl)
-        .then(res => res.json())
-        .then(data => {
-          updateCarData(data[0] || data);
-          setIsRefreshing(false);
-        })
-        .catch(() => {
-          setIsRefreshing(false);
-        });
-    } else {
-      setTimeout(() => setIsRefreshing(false), 500);
-    }
-  }, [props.fallbackApiUrl]);
-
-  // Whether to show the manual refresh button
-  const showRefreshControl = connectionStatus.telemetry !== "open" && !!props.fallbackApiUrl;
-
-  // Connection indicator
-  const connectionIndicator = () => {
+  // Memoize the connection indicator to prevent re-renders when other state changes
+  const connectionIndicator = useMemo(() => {
     const status = connectionStatus.telemetry;
     
     if (status === "open") {
@@ -159,17 +163,42 @@ export default function TelemetryDisplay(props: TelemetryDisplayProps) {
     }
     
     return null;
-  };
+  }, [connectionStatus.telemetry]);
 
-  // The data to display
-  const display = carData || {
-    speed: 0,
-    throttle: 0,
-    brake: 0,
-    gear: 0,
-    drs: false,
-    rpm: 0,
-  };
+  // Memoize the display data to prevent unnecessary calculations
+  const display = useMemo(() => {
+    return carData || {
+      speed: 0,
+      throttle: 0,
+      brake: 0,
+      gear: 0,
+      drs: false,
+      rpm: 0,
+    };
+  }, [carData]);
+
+  // Memoize the refresh handler
+  const handleRefresh = useCallback(() => {
+    setIsRefreshing(true);
+    
+    // Manual refresh logic
+    if (props.fallbackApiUrl) {
+      fetch(props.fallbackApiUrl)
+        .then(res => res.json())
+        .then(data => {
+          updateCarData(data[0] || data);
+          setIsRefreshing(false);
+        })
+        .catch(() => {
+          setIsRefreshing(false);
+        });
+    } else {
+      setTimeout(() => setIsRefreshing(false), 500);
+    }
+  }, [props.fallbackApiUrl, updateCarData]);
+
+  // Whether to show the manual refresh button
+  const showRefreshControl = connectionStatus.telemetry !== "open" && !!props.fallbackApiUrl;
 
   return (
     <motion.div
@@ -271,23 +300,5 @@ export default function TelemetryDisplay(props: TelemetryDisplayProps) {
   );
 }
 
-function MetricDisplay({ icon, value, unit, label, prevValue }) {
-  // Determine if the value has changed significantly for animation
-  const hasChanged = prevValue !== undefined && 
-    Math.abs(parseFloat(prevValue) - parseFloat(value)) > (label === "Speed" ? 2 : 5);
-  
-  return (
-    <div className="flex flex-col items-center justify-center tap-target p-responsive-sm">
-      <div className="mb-1" style={{ minHeight: '24px' }}>{icon}</div>
-      <motion.div 
-        className="metric-value"
-        animate={hasChanged ? { scale: [1, 1.1, 1] } : {}}
-        transition={{ duration: 0.3 }}
-      >
-        {value}
-        <span className="ml-1 text-responsive-xs">{unit}</span>
-      </motion.div>
-      <div className="metric-label">{label}</div>
-    </div>
-  );
-}
+// Export with memo to prevent re-renders when parent components update
+export default React.memo(TelemetryDisplay);

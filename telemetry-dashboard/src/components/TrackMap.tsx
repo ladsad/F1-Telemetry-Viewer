@@ -1,6 +1,6 @@
 "use client"
 
-import { useEffect, useRef, useCallback } from "react";
+import React, { useEffect, useRef, useCallback, useMemo, useState } from "react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { motion, AnimatePresence } from "framer-motion";
 import { MapIcon, ZoomIn, ZoomOut } from "lucide-react";
@@ -9,7 +9,6 @@ import LapCounter from "@/components/LapCounter";
 import { OpenF1Service } from "@/lib/api/openf1";
 import AnimatedButton from "@/components/AnimatedButton";
 import { useTelemetry } from "@/context/TelemetryDataContext";
-import { useState } from "react";
 import ConnectionStatusIndicator from "@/components/ConnectionStatusIndicator";
 import { Loader2 } from "lucide-react";
 
@@ -60,6 +59,47 @@ async function fetchTrackData(sessionKey: string) {
   
   return { positions, layout, sectorTimings, lapInfo };
 }
+
+// Memoize the marker component to prevent unnecessary renders
+const DriverMarker = React.memo(({ driver, cx, cy }) => {
+  return (
+    <motion.g
+      key={driver.driver_number}
+      initial={{ x: cx - 30, y: cy, opacity: 0 }}
+      animate={{ 
+        x: cx, 
+        y: cy, 
+        opacity: 1,
+        transition: {
+          x: { type: "spring", stiffness: 100, damping: 20 },
+          y: { type: "spring", stiffness: 100, damping: 20 },
+        }
+      }}
+      exit={{ opacity: 0, scale: 0 }}
+    >
+      <motion.circle
+        cx={0}
+        cy={0}
+        r={12}
+        fill={driver.color}
+        stroke="#fff"
+        strokeWidth={2}
+        whileHover={{ scale: 1.2 }}
+        whileTap={{ scale: 1.3 }}
+      />
+      <motion.text
+        x={0}
+        y={4}
+        textAnchor="middle"
+        fontSize="10"
+        fill="#fff"
+        fontWeight="bold"
+      >
+        {driver.driver_number}
+      </motion.text>
+    </motion.g>
+  );
+});
 
 export default function TrackMap() {
   const { colors } = useTheme();
@@ -147,7 +187,7 @@ export default function TrackMap() {
     };
   }, [sessionKey, connectionStatus.positions]);
 
-  // Handle touch pan interactions
+  // Memoize pan handlers to prevent recreations
   const handlePanStart = useCallback((clientX: number, clientY: number) => {
     setIsPanning(true);
     lastPanPoint.current = { x: clientX, y: clientY };
@@ -171,31 +211,25 @@ export default function TrackMap() {
     setIsPanning(false);
   }, []);
   
-  // Setup pan event listeners
-  useEffect(() => {
-    const handleMouseMove = (e: MouseEvent) => handlePanMove(e.clientX, e.clientY);
-    const handleTouchMove = (e: TouchEvent) => {
-      if (e.touches[0]) handlePanMove(e.touches[0].clientX, e.touches[0].clientY);
-    };
-    
-    if (isPanning) {
-      window.addEventListener('mousemove', handleMouseMove);
-      window.addEventListener('touchmove', handleTouchMove, { passive: false });
-      window.addEventListener('mouseup', handlePanEnd);
-      window.addEventListener('touchend', handlePanEnd);
-    }
-    
-    return () => {
-      window.removeEventListener('mousemove', handleMouseMove);
-      window.removeEventListener('touchmove', handleTouchMove);
-      window.removeEventListener('mouseup', handlePanEnd);
-      window.removeEventListener('touchend', handlePanEnd);
-    };
-  }, [isPanning, handlePanMove, handlePanEnd]);
-  
-  // Zoom handlers
+  // Memoize zoom handlers
   const handleZoomIn = useCallback(() => setZoomLevel(prev => Math.min(prev * 1.2, 3)), []);
   const handleZoomOut = useCallback(() => setZoomLevel(prev => Math.max(prev / 1.2, 0.5)), []);
+
+  // Memoize calculated driver positions for the map
+  const driverPositions = useMemo(() => {
+    return positions.map((driver) => {
+      const cx = 40 + driver.x * 220;
+      const cy = 160 - driver.y * 120;
+      return { driver, cx, cy };
+    });
+  }, [positions]);
+
+  // Memoize lap markers to avoid recalculation
+  const lapMarkers = useMemo(() => {
+    // Generate lap markers based on raceProgress.totalLaps
+    // ...
+    return null; // Replace with actual markers
+  }, [raceProgress.totalLaps]);
 
   return (
     <motion.div
@@ -298,48 +332,9 @@ export default function TrackMap() {
                 
                 {/* Driver markers with Framer Motion animation */}
                 <AnimatePresence>
-                  {positions.map((driver) => {
-                    const cx = 40 + driver.x * 220;
-                    const cy = 160 - driver.y * 120;
-                    
-                    return (
-                      <motion.g
-                        key={driver.driver_number}
-                        initial={{ x: cx - 30, y: cy, opacity: 0 }}
-                        animate={{ 
-                          x: cx, 
-                          y: cy, 
-                          opacity: 1,
-                          transition: {
-                            x: { type: "spring", stiffness: 100, damping: 20 },
-                            y: { type: "spring", stiffness: 100, damping: 20 },
-                          }
-                        }}
-                        exit={{ opacity: 0, scale: 0 }}
-                      >
-                        <motion.circle
-                          cx={0}
-                          cy={0}
-                          r={12} // Larger for touch targets
-                          fill={driver.color}
-                          stroke="#fff"
-                          strokeWidth={2}
-                          whileHover={{ scale: 1.2 }}
-                          whileTap={{ scale: 1.3 }}
-                        />
-                        <motion.text
-                          x={0}
-                          y={4}
-                          textAnchor="middle"
-                          fontSize="10"
-                          fill="#fff"
-                          fontWeight="bold"
-                        >
-                          {driver.driver_number}
-                        </motion.text>
-                      </motion.g>
-                    );
-                  })}
+                  {driverPositions.map(({ driver, cx, cy }) => (
+                    <DriverMarker key={driver.driver_number} driver={driver} cx={cx} cy={cy} />
+                  ))}
                 </AnimatePresence>
               </g>
             </svg>
@@ -378,3 +373,5 @@ export default function TrackMap() {
     </motion.div>
   );
 }
+
+export default React.memo(TrackMap);

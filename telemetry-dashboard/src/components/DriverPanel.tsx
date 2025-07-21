@@ -1,29 +1,45 @@
 "use client"
 
-import { useEffect, useState } from "react"
-import { Card, CardHeader, CardTitle, CardContent } from "@/components/ui/card"
-import { ChevronDown, Circle, Zap, Wrench, Loader2 } from "lucide-react"
-import { motion, AnimatePresence } from "framer-motion"
-import { useTheme } from "@/components/ThemeProvider"
-import { HelmetIcon } from "@/components/Icons"
-import DriverPerformanceMetrics from "@/components/DriverPerformanceMetrics"
-import TireStrategyChart from "@/components/TireStrategyChart"
-import DriverRadio from "@/components/DriverRadio"
-import { OpenF1Service } from "@/lib/api/openf1"
-import { useTelemetry } from "@/context/TelemetryDataContext"
-import ConnectionStatusIndicator from "@/components/ConnectionStatusIndicator"
+import React, { useEffect, useState, useCallback, useMemo } from "react";
+import { Card, CardHeader, CardTitle, CardContent } from "@/components/ui/card";
+import { Circle, Battery, GaugeCircle, Activity, Wrench } from "lucide-react";
+import { motion } from "framer-motion";
+import { useTheme } from "@/components/ThemeProvider";
+import { useTelemetry } from "@/context/TelemetryDataContext";
+import ConnectionStatusIndicator from "@/components/ConnectionStatusIndicator";
+import { Loader2 } from "lucide-react";
+import { OpenF1Service } from "@/lib/api/openf1";
 
-const compoundColors: Record<string, string> = {
-  Soft: "bg-red-500",
-  Medium: "bg-yellow-400",
-  Hard: "bg-gray-300",
-  Inter: "bg-green-500",
-  Wet: "bg-blue-500",
+// Define proper types for the StatusIndicator props
+interface StatusIndicatorProps {
+  label: string;
+  value: string | number;
+  icon: React.ReactElement;
+  color?: string;
 }
 
+// Create a memoized status component with proper typing
+const StatusIndicator = React.memo(({ label, value, icon, color = "" }: StatusIndicatorProps) => (
+  <div className="flex items-center gap-2 tap-target p-2">
+    {React.cloneElement(icon, { className: `w-6 h-6 ${color} flex-shrink-0` })}
+    <span className="font-semibold text-responsive-base">{value}</span>
+    <span className="text-responsive-xs text-muted-foreground">{label}</span>
+  </div>
+));
+
+// Define compound colors with proper typing
+const compoundColors: Record<string, string> = {
+  "SOFT": "bg-red-500",
+  "MEDIUM": "bg-yellow-500",
+  "HARD": "bg-white",
+  "INTERMEDIATE": "bg-green-500",
+  "WET": "bg-blue-500",
+  "UNKNOWN": "bg-gray-300"
+};
+
 export function DriverPanel() {
-  const { colors } = useTheme()
-  const [expanded, setExpanded] = useState(false)
+  const { colors } = useTheme();
+  const [expanded, setExpanded] = useState(false);
   
   // Access telemetry context
   const { 
@@ -32,29 +48,30 @@ export function DriverPanel() {
     selectedDriverNumber,
     sessionKey,
     connectionStatus
-  } = useTelemetry()
+  } = useTelemetry();
   
   // Get driver status from context
-  const driverStatus = telemetryState.driverStatus?.[selectedDriverNumber]
+  const driverStatus = telemetryState.driverStatus?.[selectedDriverNumber];
   
-  // Fetch driver status on mount and when driver changes
-  useEffect(() => {
+  // Memoize fetch function to prevent recreation on renders
+  const fetchStatus = useCallback(async () => {
     if (!sessionKey || !selectedDriverNumber) return;
     
-    let mounted = true;
-    
-    async function fetchStatus() {
-      try {
-        const openf1 = new OpenF1Service("https://api.openf1.org/v1");
-        const data = await openf1.getDriverStatus(sessionKey, selectedDriverNumber);
-        
-        if (mounted && data) {
-          updateDriverStatus(selectedDriverNumber, data);
-        }
-      } catch (err) {
-        console.error("Error fetching driver status:", err);
+    try {
+      const openf1 = new OpenF1Service("https://api.openf1.org/v1");
+      const data = await openf1.getDriverStatus(sessionKey, selectedDriverNumber);
+      
+      if (data) {
+        updateDriverStatus(selectedDriverNumber, data);
       }
+    } catch (err) {
+      console.error("Error fetching driver status:", err);
     }
+  }, [sessionKey, selectedDriverNumber, updateDriverStatus]);
+
+  // Effect for fetching driver status
+  useEffect(() => {
+    let mounted = true;
     
     fetchStatus();
     
@@ -64,11 +81,32 @@ export function DriverPanel() {
       mounted = false;
       clearInterval(interval);
     };
-  }, [sessionKey, selectedDriverNumber]);
+  }, [fetchStatus]);
 
-  // Toggle panel expansion
-  const toggleExpand = () => setExpanded(prev => !prev);
+  // Toggle panel expansion with useCallback
+  const toggleExpand = useCallback(() => setExpanded(prev => !prev), []);
 
+  // Memoize tire compound display to prevent unnecessary re-renders
+  const tireCompoundDisplay = useMemo(() => {
+    if (!driverStatus) return null;
+    
+    const compound = driverStatus.tire_compound || "UNKNOWN";
+    const age = driverStatus.tire_age || 0;
+    
+    return (
+      <div className="flex flex-row items-center flex-wrap gap-2 tap-target p-2">
+        <Circle className={`w-6 h-6 ${compoundColors[compound] || "bg-gray-200"} 
+          flex-shrink-0 ${connectionStatus.timing !== "open" ? "opacity-60" : ""}`} />
+        <span className="font-semibold text-responsive-base">
+          {compound} Tire
+          {connectionStatus.timing !== "open" && 
+            <span className="text-xs font-normal text-muted-foreground ml-2">(cached)</span>}
+        </span>
+        <span className="text-responsive-xs text-muted-foreground">({age} laps)</span>
+      </div>
+    );
+  }, [driverStatus, connectionStatus.timing]);
+  
   // Show loading state if no driver data
   if (!driverStatus) {
     return (
@@ -83,7 +121,7 @@ export function DriverPanel() {
           <Loader2 className="w-10 h-10 text-primary animate-spin mb-4" />
           <div className="text-muted-foreground text-responsive-sm">Loading driver data...</div>
           <div className="text-xs text-muted-foreground mt-2">
-            {connectionStatus.timing === "closed" ? 
+            {connectionStatus?.timing === "closed" ? 
               "Connection unavailable - check network" : 
               "Connecting to timing service..."}
           </div>
@@ -93,123 +131,66 @@ export function DriverPanel() {
   }
 
   return (
-    <Card 
-      className="w-full h-full card-transition card-hover" 
+    <Card
+      className="w-full h-full card-transition card-hover"
       style={{ borderColor: colors.primary, background: colors.primary + "10" }}
     >
-      <CardHeader 
-        className="flex flex-row items-center justify-between cursor-pointer p-responsive-md tap-target"
-        onClick={toggleExpand}
-      >
-        <motion.div 
-          className="flex items-center gap-2"
-          whileHover={{ x: 5 }}
-          whileTap={{ x: 10 }}
-          transition={{ type: "spring", stiffness: 400 }}
-        >
-          <motion.div
-            whileHover={{ rotate: 10 }}
-            whileTap={{ rotate: 20 }}
-            transition={{ duration: 0.2 }}
-          >
-            <HelmetIcon className="w-8 h-8" style={{ color: driverStatus.teamColor }} />
-          </motion.div>
-          <div className="flex items-center gap-2">
-            <CardTitle className="text-responsive-lg truncate max-w-[150px] sm:max-w-none">
-              {driverStatus.driver_name}
-            </CardTitle>
-            <ConnectionStatusIndicator service="timing" size="sm" showLabel={false} />
-            <div className="text-responsive-xs text-muted-foreground">#{driverStatus.driver_number}</div>
-          </div>
-        </motion.div>
-        <motion.div
-          animate={{ rotate: expanded ? 180 : 0 }}
-          transition={{ duration: 0.3 }}
-          className="p-2 tap-target"
-        >
-          <ChevronDown className="w-6 h-6" />
-        </motion.div>
-      </CardHeader>
-      
-      <CardContent className="flex flex-col gap-responsive-md p-responsive-md">
-        <div className="flex flex-row items-center flex-wrap gap-2 tap-target p-2">
-          <Circle className={`w-6 h-6 ${compoundColors[driverStatus.tire_compound] || "bg-gray-200"} 
-            flex-shrink-0 ${connectionStatus.timing !== "open" ? "opacity-60" : ""}`} />
-          <span className="font-semibold text-responsive-base">
-            {driverStatus.tire_compound} Tire
-            {connectionStatus.timing !== "open" && 
-              <span className="text-xs font-normal text-muted-foreground ml-2">(cached)</span>}
-          </span>
-          <span className="text-responsive-xs text-muted-foreground">({driverStatus.tire_age} laps)</span>
+      <CardHeader>
+        <div className="flex items-center gap-2">
+          <CardTitle className="text-responsive-lg truncate max-w-[150px] sm:max-w-none">
+            {driverStatus.driver_name || `Driver #${selectedDriverNumber}`}
+          </CardTitle>
+          <ConnectionStatusIndicator service="timing" size="sm" showLabel={false} />
+          <div className="text-responsive-xs text-muted-foreground">#{driverStatus.driver_number || selectedDriverNumber}</div>
         </div>
-        
-        <AnimatePresence>
-          {expanded && (
-            <motion.div
-              className="flex flex-col gap-responsive-lg"
-              initial={{ opacity: 0, height: 0 }}
-              animate={{ opacity: 1, height: "auto" }}
-              exit={{ opacity: 0, height: 0 }}
-              transition={{ duration: 0.3 }}
-            >
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-responsive-sm">
-                <div className="flex items-center gap-2 tap-target p-2">
-                  <Zap className="w-6 h-6 text-purple-500 flex-shrink-0" />
-                  <span className="font-semibold text-responsive-base">{driverStatus.ers}%</span>
-                  <span className="text-responsive-xs text-muted-foreground">ERS</span>
-                </div>
-                <div className="flex items-center gap-2 tap-target p-2">
-                  <Wrench className="w-6 h-6 text-orange-400 flex-shrink-0" />
-                  <span className="font-semibold text-responsive-base">{driverStatus.pit_status}</span>
-                  <span className="text-responsive-xs text-muted-foreground truncate">
-                    {driverStatus.last_pit ? `Last: Lap ${driverStatus.last_pit}` : ""}
-                  </span>
-                </div>
-              </div>
-
-              {/* Animated components with staggered animations */}
-              <motion.div
-                initial={{ opacity: 0, y: 20 }}
-                animate={{ opacity: 1, y: 0 }}
-                transition={{ delay: 0.1 }}
-              >
-                <DriverPerformanceMetrics />
-              </motion.div>
-              
-              <motion.div
-                initial={{ opacity: 0, y: 20 }}
-                animate={{ opacity: 1, y: 0 }}
-                transition={{ delay: 0.2 }}
-              >
-                <TireStrategyChart />
-              </motion.div>
-              
-              <motion.div
-                initial={{ opacity: 0, y: 20 }}
-                animate={{ opacity: 1, y: 0 }}
-                transition={{ delay: 0.3 }}
-              >
-                <DriverRadio />
-              </motion.div>
-            </motion.div>
-          )}
-        </AnimatePresence>
+      </CardHeader>
+      <CardContent>
+        <motion.div
+          initial={{ opacity: 0 }}
+          animate={{ opacity: 1 }}
+          transition={{ duration: 0.3 }}
+          className="flex flex-col gap-2"
+        >
+          {/* Tire Compound */}
+          {tireCompoundDisplay}
+          
+          {/* Energy Status */}
+          <StatusIndicator
+            label="ERS Deployment"
+            value={`${(driverStatus.ers_deployment || 0).toFixed(1)}%`}
+            icon={<Battery />}
+            color="text-blue-500"
+          />
+          
+          {/* Fuel Status */}
+          <StatusIndicator
+            label="Fuel Remaining"
+            value={`${(driverStatus.fuel_remaining || 0).toFixed(1)}kg`}
+            icon={<GaugeCircle />}
+            color="text-yellow-500"
+          />
+          
+          {/* Last Lap */}
+          <StatusIndicator
+            label="Last Lap"
+            value={driverStatus.last_lap_time ? 
+              new Date(driverStatus.last_lap_time * 1000).toISOString().substr(14, 8) : 
+              "--:--:--"}
+            icon={<Activity />}
+            color="text-green-500"
+          />
+          
+          {/* Pit Status */}
+          <StatusIndicator
+            label="Pit Status"
+            value={driverStatus.in_pit ? "In Pit" : "On Track"}
+            icon={<Wrench />}
+            color={driverStatus.in_pit ? "text-red-500" : "text-green-500"}
+          />
+        </motion.div>
       </CardContent>
     </Card>
   );
 }
 
-function MetricRow({ icon, label, value, detail }) {
-  return (
-    <div className="flex items-center gap-3">
-      {icon}
-      <div>
-        <div className="text-sm font-semibold">{label}</div>
-        <div className="flex items-center gap-2">
-          <span className="metric-value">{value}</span>
-          {detail && <span className="text-xs text-muted-foreground">{detail}</span>}
-        </div>
-      </div>
-    </div>
-  )
-}
+export const DriverPanel = React.memo(DriverPanel);

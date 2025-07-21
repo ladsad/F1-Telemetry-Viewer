@@ -1,6 +1,6 @@
 "use client"
 
-import { useEffect, useState, useRef } from "react"
+import React, { useEffect, useState, useRef, useCallback, useMemo } from "react"
 import { Card, CardHeader, CardTitle, CardContent } from "@/components/ui/card"
 import { OpenF1Service } from "@/lib/api/openf1"
 import type { OpenF1LapTime, OpenF1DriverInfo } from "@/lib/api/types"
@@ -24,23 +24,27 @@ type Series = {
   data: { lap: number; time: number }[]
 }
 
-export default function LapTimeComparisonChart({
+function LapTimeComparisonChart({
   sessionKey,
   driverNumbers,
 }: LapTimeComparisonChartProps) {
-  const { colors } = useTheme()
-  const [series, setSeries] = useState<Series[]>([])
-  const [loading, setLoading] = useState(false)
-  const [error, setError] = useState<string | null>(null)
-  const [activeDrivers, setActiveDrivers] = useState<number[]>([...driverNumbers])
-  const [touchPoints, setTouchPoints] = useState<{x: number, y: number}[]>([])
-  const chartRef = useRef<HTMLDivElement>(null)
+  const { colors } = useTheme();
+  const [series, setSeries] = useState<Series[]>([]);
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const [activeDrivers, setActiveDrivers] = useState<number[]>([...driverNumbers]);
+  const [touchPoints, setTouchPoints] = useState<{x: number, y: number}[]>([]);
+  const chartRef = useRef<HTMLDivElement>(null);
   
+  // Fetch lap times with useEffect
   useEffect(() => {
-    if (!sessionKey || !driverNumbers.length) return
-    setLoading(true)
-    setError(null)
-    const openf1 = new OpenF1Service("https://api.openf1.org/v1")
+    if (!sessionKey || !driverNumbers.length) return;
+    
+    setLoading(true);
+    setError(null);
+    
+    const openf1 = new OpenF1Service("https://api.openf1.org/v1");
+    
     Promise.all(
       driverNumbers.map(async (driverNumber) => {
         const [laps, info] = await Promise.all([
@@ -65,50 +69,64 @@ export default function LapTimeComparisonChart({
     )
       .then(setSeries)
       .catch((err) => setError((err as Error).message))
-      .finally(() => setLoading(false))
-  }, [sessionKey, driverNumbers])
+      .finally(() => setLoading(false));
+  }, [sessionKey, driverNumbers]);
 
-  // Touch-friendly driver toggle
-  const toggleDriver = (driverNumber: number) => {
-    if (activeDrivers.includes(driverNumber)) {
-      setActiveDrivers(activeDrivers.filter(d => d !== driverNumber))
-    } else {
-      setActiveDrivers([...activeDrivers, driverNumber])
-    }
-  }
+  // Memoize driver toggle handler
+  const toggleDriver = useCallback((driverNumber: number) => {
+    setActiveDrivers(current => 
+      current.includes(driverNumber) 
+        ? current.filter(d => d !== driverNumber)
+        : [...current, driverNumber]
+    );
+  }, []);
   
-  // Handle touch interactions with chart
-  const handleChartTouch = (e: React.TouchEvent) => {
-    if (!chartRef.current || e.touches.length === 0) return
+  // Memoize chart touch handler
+  const handleChartTouch = useCallback((e: React.TouchEvent) => {
+    if (!chartRef.current || e.touches.length === 0) return;
     
-    const rect = chartRef.current.getBoundingClientRect()
-    const touchX = e.touches[0].clientX - rect.left
-    const touchY = e.touches[0].clientY - rect.top
+    const rect = chartRef.current.getBoundingClientRect();
+    const touchX = e.touches[0].clientX - rect.left;
+    const touchY = e.touches[0].clientY - rect.top;
     
-    // Add touch indicator for feedback
-    setTouchPoints([...touchPoints, {x: touchX, y: touchY}])
-    setTimeout(() => setTouchPoints(prev => prev.slice(1)), 1000)
-  }
+    setTouchPoints(prev => {
+      const newPoints = [...prev, {x: touchX, y: touchY}];
+      setTimeout(() => setTouchPoints(p => p.slice(1)), 1000);
+      return newPoints;
+    });
+  }, []);
   
-  // Export chart data to CSV
-  const exportToCSV = () => {
-    // Implementation for exporting data
-    console.log("Exporting chart data")
-  }
+  // Memoize CSV export function
+  const exportToCSV = useCallback(() => {
+    if (!series.length) return;
+    
+    // CSV export logic
+    // ...
+  }, [series]);
 
-  // Build chart data: one object per lap, with each driver's time as a key
-  const chartData: Record<string, any>[] = []
-  if (series.length) {
-    const maxLap = Math.max(...series.flatMap((s) => s.data.map((d) => d.lap)))
+  // Memoize chart data calculation (expensive operation)
+  const chartData = useMemo(() => {
+    if (!series.length) return [];
+    
+    const result: Record<string, any>[] = [];
+    const maxLap = Math.max(...series.flatMap((s) => s.data.map((d) => d.lap)));
+    
     for (let lap = 1; lap <= maxLap; lap++) {
-      const entry: Record<string, any> = { lap }
+      const entry: Record<string, any> = { lap };
       series.forEach((s) => {
-        const found = s.data.find((d) => d.lap === lap)
-        entry[s.name] = found ? found.time : null
-      })
-      chartData.push(entry)
+        const found = s.data.find((d) => d.lap === lap);
+        entry[s.name] = found ? found.time : null;
+      });
+      result.push(entry);
     }
-  }
+    
+    return result;
+  }, [series]);
+
+  // Memoize active series for charts
+  const activeSeries = useMemo(() => {
+    return series.filter(s => activeDrivers.includes(s.driverNumber));
+  }, [series, activeDrivers]);
 
   return (
     <Card 
@@ -320,3 +338,5 @@ export default function LapTimeComparisonChart({
     </Card>
   )
 }
+
+export default React.memo(LapTimeComparisonChart);

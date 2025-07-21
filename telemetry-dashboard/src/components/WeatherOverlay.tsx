@@ -1,6 +1,6 @@
 "use client"
 
-import { useEffect } from "react";
+import React, { useEffect, useCallback, useMemo } from "react";
 import { CloudRain, Wind, Thermometer } from "lucide-react";
 import { Card, CardHeader, CardTitle, CardContent } from "@/components/ui/card";
 import { motion } from "framer-motion";
@@ -13,29 +13,46 @@ import WeatherTrendChart from "@/components/WeatherTrendChart";
 import ConnectionStatusIndicator from "@/components/ConnectionStatusIndicator"
 import { Loader2 } from "lucide-react"
 
+// Create a memoized weather metric component
+const WeatherMetric = React.memo(({ icon, value, unit, label }) => (
+  <motion.div 
+    className="flex items-center gap-2"
+    whileHover={{ scale: 1.05 }}
+  >
+    {React.cloneElement(icon, { className: "flex-shrink-0" })}
+    <div className="flex flex-col">
+      <span className="font-semibold">{value}{unit}</span>
+      <span className="text-xs uppercase tracking-wider text-muted-foreground">{label}</span>
+    </div>
+  </motion.div>
+));
+
 export function WeatherOverlay() {
   const { colors } = useTheme();
   const { telemetryState, updateWeather, sessionKey, connectionStatus } = useTelemetry();
   const { weather } = telemetryState;
+  
+  // Memoize fetch function
+  const fetchWeather = useCallback(async () => {
+    if (!sessionKey) return;
+    
+    try {
+      const openf1 = new OpenF1Service("https://api.openf1.org/v1");
+      const data = await openf1.getWeather(sessionKey);
+      
+      if (Array.isArray(data) && data.length > 0) {
+        updateWeather(data[data.length - 1]);
+      }
+    } catch (err) {
+      console.error("Error fetching weather:", err);
+    }
+  }, [sessionKey, updateWeather]);
   
   // Fetch weather data on mount and periodically
   useEffect(() => {
     if (!sessionKey) return;
     
     let mounted = true;
-    
-    async function fetchWeather() {
-      try {
-        const openf1 = new OpenF1Service("https://api.openf1.org/v1");
-        const data = await openf1.getWeather(sessionKey);
-        
-        if (mounted && Array.isArray(data) && data.length > 0) {
-          updateWeather(data[data.length - 1]);
-        }
-      } catch (err) {
-        console.error("Error fetching weather:", err);
-      }
-    }
     
     fetchWeather();
     const interval = setInterval(fetchWeather, 10000);
@@ -44,21 +61,27 @@ export function WeatherOverlay() {
       mounted = false;
       clearInterval(interval);
     };
-  }, [sessionKey]);
+  }, [fetchWeather, sessionKey]);
 
-  // Calculate weather impact (simplified example)
-  const impact = weather ? {
-    rain: { timeLoss: weather.rainfall > 0 ? weather.rainfall * 0.8 : 0 },
-    temp: { timeLoss: Math.abs(weather.track_temperature - 35) * 0.05 },
-    wind: { timeLoss: weather.wind_speed > 15 ? (weather.wind_speed - 15) * 0.1 : 0 },
-    total: 0,
-    avgLap: 0
-  } : null;
-  
-  if (impact) {
-    impact.total = impact.rain.timeLoss + impact.temp.timeLoss + impact.wind.timeLoss;
-    impact.avgLap = impact.total / 3; // Simple average for demo
-  }
+  // Calculate weather impact (memoized to avoid recalculation)
+  const impact = useMemo(() => {
+    if (!weather) return null;
+    
+    const rainImpact = weather.rainfall > 0 ? weather.rainfall * 0.8 : 0;
+    const tempImpact = Math.abs(weather.track_temperature - 35) * 0.05;
+    const windImpact = weather.wind_speed > 15 ? (weather.wind_speed - 15) * 0.1 : 0;
+    
+    const totalImpact = rainImpact + tempImpact + windImpact;
+    const avgLapImpact = totalImpact / 3; // Simple average for demo
+    
+    return {
+      rain: { timeLoss: rainImpact },
+      temp: { timeLoss: tempImpact },
+      wind: { timeLoss: windImpact },
+      total: totalImpact,
+      avgLap: avgLapImpact
+    };
+  }, [weather]);
 
   if (!weather) {
     return (
@@ -118,49 +141,33 @@ export function WeatherOverlay() {
         <CardContent>
           <WeatherAlert weather={weather} />
           <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-4 timing-display">
-            <motion.div 
-              className="flex items-center gap-2"
-              whileHover={{ scale: 1.05 }}
-            >
-              <CloudRain className="text-blue-500 flex-shrink-0" />
-              <div className="flex flex-col">
-                <span className="font-semibold">{weather.rainfall ?? 0} mm</span>
-                <span className="text-xs uppercase tracking-wider text-muted-foreground">Rainfall</span>
-              </div>
-            </motion.div>
+            <WeatherMetric 
+              icon={<CloudRain className="text-blue-500" />}
+              value={weather.rainfall ?? 0}
+              unit=" mm"
+              label="Rainfall"
+            />
             
-            <motion.div 
-              className="flex items-center gap-2"
-              whileHover={{ scale: 1.05 }}
-            >
-              <Thermometer className="text-orange-500 flex-shrink-0" />
-              <div className="flex flex-col">
-                <span className="font-semibold">{weather.air_temperature}°C</span>
-                <span className="text-xs uppercase tracking-wider text-muted-foreground">Air</span>
-              </div>
-            </motion.div>
+            <WeatherMetric 
+              icon={<Thermometer className="text-orange-500" />}
+              value={weather.air_temperature}
+              unit="°C"
+              label="Air"
+            />
             
-            <motion.div 
-              className="flex items-center gap-2"
-              whileHover={{ scale: 1.05 }}
-            >
-              <Thermometer className="text-yellow-500 flex-shrink-0" />
-              <div className="flex flex-col">
-                <span className="font-semibold">{weather.track_temperature}°C</span>
-                <span className="text-xs uppercase tracking-wider text-muted-foreground">Track</span>
-              </div>
-            </motion.div>
+            <WeatherMetric 
+              icon={<Thermometer className="text-yellow-500" />}
+              value={weather.track_temperature}
+              unit="°C"
+              label="Track"
+            />
             
-            <motion.div 
-              className="flex items-center gap-2"
-              whileHover={{ scale: 1.05 }}
-            >
-              <Wind className="text-cyan-500 flex-shrink-0" />
-              <div className="flex flex-col">
-                <span className="font-semibold">{weather.wind_speed} km/h</span>
-                <span className="text-xs uppercase tracking-wider text-muted-foreground">{weather.wind_direction}</span>
-              </div>
-            </motion.div>
+            <WeatherMetric 
+              icon={<Wind className="text-cyan-500" />}
+              value={weather.wind_speed}
+              unit=" km/h"
+              label={weather.wind_direction}
+            />
           </div>
           
           <motion.div
@@ -185,3 +192,5 @@ export function WeatherOverlay() {
     </motion.div>
   );
 }
+
+export const WeatherOverlay = React.memo(WeatherOverlay);

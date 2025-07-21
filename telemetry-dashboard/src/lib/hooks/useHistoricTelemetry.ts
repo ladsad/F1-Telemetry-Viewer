@@ -1,49 +1,81 @@
-import { useEffect, useRef, useState } from "react"
+import { useEffect, useRef, useState, useCallback, useMemo } from "react";
 
 export function useHistoricPlayback(
   max: number,
   { initialSpeed = 1, onFrame }: { initialSpeed?: number; onFrame?: (idx: number) => void } = {}
 ) {
-  const [playing, setPlaying] = useState(false)
-  const [speed, setSpeed] = useState(initialSpeed)
-  const [currentIdx, setCurrentIdx] = useState(0)
-  const intervalRef = useRef<NodeJS.Timeout | null>(null)
+  const [currentIdx, setCurrentIdx] = useState(0);
+  const [playing, setPlaying] = useState(false);
+  const [speed, setSpeed] = useState(initialSpeed);
+  const frameRef = useRef<number | null>(null);
+  const lastFrameTimeRef = useRef<number | null>(null);
 
+  // Memoize playback handlers to prevent recreations on rerenders
+  const play = useCallback(() => setPlaying(true), []);
+  const pause = useCallback(() => setPlaying(false), []);
+  const toggle = useCallback(() => setPlaying(p => !p), []);
+  const stepBack = useCallback(() => 
+    setCurrentIdx(idx => Math.max(0, idx - 1)), 
+    []
+  );
+  
+  const stepForward = useCallback(() => 
+    setCurrentIdx(idx => Math.min(max, idx + 1)), 
+    [max]
+  );
+
+  // Memoize derived state to prevent unnecessary calculations
+  const canStepBack = useMemo(() => currentIdx > 0, [currentIdx]);
+  const canStepForward = useMemo(() => currentIdx < max, [currentIdx, max]);
+
+  // Animation frame effect with optimized calculation logic
   useEffect(() => {
-    if (!playing) {
-      if (intervalRef.current) clearInterval(intervalRef.current)
-      return
-    }
-    intervalRef.current = setInterval(() => {
-      setCurrentIdx((idx) => {
-        if (idx < max) {
-          const next = idx + 1
-          onFrame?.(next)
-          return next
+    if (!playing) return;
+
+    const animate = (timestamp: number) => {
+      if (lastFrameTimeRef.current === null) {
+        lastFrameTimeRef.current = timestamp;
+        frameRef.current = requestAnimationFrame(animate);
+        return;
+      }
+
+      const elapsed = timestamp - lastFrameTimeRef.current;
+      const frameRate = 1000 / (60 / speed); // Adjust for speed
+
+      if (elapsed > frameRate) {
+        lastFrameTimeRef.current = timestamp;
+        
+        if (currentIdx < max) {
+          const newIdx = currentIdx + 1;
+          setCurrentIdx(newIdx);
+          onFrame?.(newIdx);
         } else {
-          setPlaying(false)
-          return idx
+          setPlaying(false);
         }
-      })
-    }, 1000 / speed)
+      }
+
+      frameRef.current = requestAnimationFrame(animate);
+    };
+
+    frameRef.current = requestAnimationFrame(animate);
+
     return () => {
-      if (intervalRef.current) clearInterval(intervalRef.current)
-    }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [playing, speed, max])
+      if (frameRef.current) {
+        cancelAnimationFrame(frameRef.current);
+      }
+      lastFrameTimeRef.current = null;
+    };
+  }, [playing, speed, max, currentIdx, onFrame]);
 
-  // Reset playback if max changes
+  // Reset playback when max changes, use useCallback to optimize
+  const resetPlayback = useCallback(() => {
+    setCurrentIdx(0);
+    setPlaying(false);
+  }, []);
+
   useEffect(() => {
-    setCurrentIdx(0)
-    setPlaying(false)
-  }, [max])
-
-  const play = () => setPlaying(true)
-  const pause = () => setPlaying(false)
-  const toggle = () => setPlaying((p) => !p)
-
-  const stepBack = () => setCurrentIdx((idx) => Math.max(0, idx - 1))
-  const stepForward = () => setCurrentIdx((idx) => Math.min(max, idx + 1))
+    resetPlayback();
+  }, [max, resetPlayback]);
 
   return {
     playing,
@@ -56,7 +88,7 @@ export function useHistoricPlayback(
     setCurrentIdx,
     stepBack,
     stepForward,
-    canStepBack: currentIdx > 0,
-    canStepForward: currentIdx < max,
-  }
+    canStepBack,
+    canStepForward
+  };
 }

@@ -39,8 +39,11 @@ const initialTelemetryState: TelemetryState = {
 const TelemetryContext = createContext<TelemetryContextType | undefined>(undefined);
 
 // Provider component
-export function TelemetryProvider({ children }: { children: React.ReactNode }) {
-  const [telemetryState, setTelemetryState] = useState<TelemetryState>(initialTelemetryState);
+export function TelemetryProvider({ children, initialSessionKey }: { children: React.ReactNode, initialSessionKey?: string }) {
+  const [telemetryState, setTelemetryState] = useState<TelemetryState>({
+    ...initialTelemetryState,
+    sessionKey: initialSessionKey || "", // Use the prop if provided
+  });
   const [selectedDriverNumber, setSelectedDriverNumber] = useState<number>(1);
   
   // Add the missing connection status state

@@ -35,7 +35,7 @@ const WeatherMetric = React.memo(({ icon, value, unit, label }: WeatherMetricPro
   </motion.div>
 ));
 
-export function WeatherOverlay({ 
+export function React.memo(WeatherOverlay({ 
   weatherData, 
   showForecast = false, 
   showImpact = true,
@@ -208,6 +208,4 @@ export function WeatherOverlay({
       </Card>
     </motion.div>
   );
-}
-
-export const WeatherOverlay = React.memo(WeatherOverlay);
+});

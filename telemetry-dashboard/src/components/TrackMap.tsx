@@ -102,7 +102,7 @@ const DriverMarker = React.memo(({ driver, cx, cy }) => {
   );
 });
 
-export default function TrackMap() {
+export default React.memo(function TrackMap() {
   const { colors } = useTheme();
   const { 
     telemetryState, 
@@ -373,6 +373,4 @@ export default function TrackMap() {
       </Card>
     </motion.div>
   );
-}
-
-export default React.memo(TrackMap);
+});

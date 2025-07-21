@@ -30,7 +30,7 @@ const compoundColors: Record<string, string> = {
   "UNKNOWN": "bg-gray-300"
 };
 
-export function DriverPanel({ driverNumber, sessionKey, showDetails = true }: DriverPanelProps = {}) {
+export function React.memo(DriverPanel({ driverNumber, sessionKey, showDetails = true }: DriverPanelProps = {}) {
   const { colors } = useTheme();
   const [expanded, setExpanded] = useState(false);
   
@@ -184,6 +184,4 @@ export function DriverPanel({ driverNumber, sessionKey, showDetails = true }: Dr
       </CardContent>
     </Card>
   );
-}
-
-export const DriverPanel = React.memo(DriverPanel);
+});

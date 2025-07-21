@@ -7,7 +7,7 @@ import AutoSizer from 'react-virtualized-auto-sizer';
 import { useTelemetry } from "@/context/TelemetryDataContext";
 import { Loader2 } from "lucide-react";
 import ConnectionStatusIndicator from "@/components/ConnectionStatusIndicator";
-import { TelemetryTableProps } from "@/types";
+import { TelemetryTableProps, TelemetryData } from "@/types";
 
 export default function TelemetryTable({ 
   data: providedData,
@@ -20,13 +20,29 @@ export default function TelemetryTable({
   const [sortField, setSortField] = useState<string>('timestamp');
   const [sortDirection, setSortDirection] = useState<'asc' | 'desc'>('desc');
   
-  // Use provided data or fall back to context data
-  const data = providedData || telemetryState.telemetryHistory || [];
+  // Get raw data from props or context
+  const rawData = providedData || telemetryState.telemetryHistory || [];
   
-  // Sort the data
-  const sortedData = [...data].sort((a, b) => {
-    if (a[sortField] < b[sortField]) return sortDirection === 'asc' ? -1 : 1;
-    if (a[sortField] > b[sortField]) return sortDirection === 'asc' ? 1 : -1;
+  // Convert to array - handle both direct array and TelemetryTimeSeriesData
+  const dataArray: TelemetryData[] = Array.isArray(rawData) 
+    ? rawData 
+    : (rawData && typeof rawData === 'object' && 'data' in rawData && Array.isArray(rawData.data))
+      ? rawData.data // Extract from TelemetryTimeSeriesData.data
+      : []; // Fallback to empty array
+  
+  // Sort the data with proper type checking
+  const sortedData = [...dataArray].sort((a: TelemetryData, b: TelemetryData) => {
+    const aValue = a[sortField as keyof TelemetryData];
+    const bValue = b[sortField as keyof TelemetryData];
+    
+    // Handle undefined values
+    if (aValue === undefined && bValue === undefined) return 0;
+    if (aValue === undefined) return sortDirection === 'asc' ? 1 : -1;
+    if (bValue === undefined) return sortDirection === 'asc' ? -1 : 1;
+    
+    // Compare values
+    if (aValue < bValue) return sortDirection === 'asc' ? -1 : 1;
+    if (aValue > bValue) return sortDirection === 'asc' ? 1 : -1;
     return 0;
   });
 
@@ -51,13 +67,26 @@ export default function TelemetryTable({
   ];
 
   // Function to format timestamp
-  const formatTimestamp = (timestamp: number) => {
-    return new Date(timestamp).toLocaleTimeString([], {
+  const formatTimestamp = (timestamp: number | string | undefined): string => {
+    if (timestamp === undefined || timestamp === null) return 'N/A';
+    
+    // Handle both number (Unix timestamp) and string (ISO date) formats
+    const date = typeof timestamp === 'number' ? new Date(timestamp) : new Date(timestamp);
+    
+    if (isNaN(date.getTime())) return 'Invalid Date';
+    
+    return date.toLocaleTimeString([], {
       hour: '2-digit',
       minute: '2-digit',
       second: '2-digit',
       fractionalSecondDigits: 3
     });
+  };
+
+  // Helper function to safely format numeric values
+  const formatNumericValue = (value: number | undefined, decimals: number = 1, unit: string = ''): string => {
+    if (value === undefined || value === null || isNaN(value)) return 'N/A';
+    return `${value.toFixed(decimals)}${unit}`;
   };
 
   return (
@@ -67,7 +96,7 @@ export default function TelemetryTable({
         {showConnectionStatus && <ConnectionStatusIndicator service="telemetry" size="sm" />}
       </CardHeader>
       <CardContent>
-        {data.length === 0 ? (
+        {dataArray.length === 0 ? (
           <div className="h-32 flex flex-col items-center justify-center text-muted-foreground">
             {connectionStatus?.telemetry === 'connecting' ? (
               <>
@@ -112,17 +141,17 @@ export default function TelemetryTable({
                       const item = sortedData[index];
                       return (
                         <div 
-                          className={`grid grid-cols-6 text-sm p-2 ${
+                          className={`grid grid-cols-6 text-sm p-2 border-b border-border/50 ${
                             index % 2 === 0 ? 'bg-muted/30' : ''
                           }`}
                           style={style}
                         >
-                          <div>{formatTimestamp(item.timestamp)}</div>
-                          <div>{item.speed.toFixed(1)} km/h</div>
-                          <div>{item.throttle.toFixed(0)}%</div>
-                          <div>{item.brake.toFixed(0)}%</div>
-                          <div>{item.gear}</div>
-                          <div>{item.rpm.toFixed(0)}</div>
+                          <div className="truncate">{formatTimestamp(item.timestamp)}</div>
+                          <div className="truncate">{formatNumericValue(item.speed, 1, ' km/h')}</div>
+                          <div className="truncate">{formatNumericValue(item.throttle, 0, '%')}</div>
+                          <div className="truncate">{formatNumericValue(item.brake, 0, '%')}</div>
+                          <div className="truncate">{item.gear !== undefined ? item.gear : 'N/A'}</div>
+                          <div className="truncate">{formatNumericValue(item.rpm, 0)}</div>
                         </div>
                       );
                     }}
@@ -133,7 +162,7 @@ export default function TelemetryTable({
           </div>
         )}
         <div className="text-xs text-muted-foreground mt-2">
-          {data.length} records • Sorted by {sortField} ({sortDirection})
+          {dataArray.length} records • Sorted by {sortField} ({sortDirection})
         </div>
       </CardContent>
     </Card>

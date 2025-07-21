@@ -33,20 +33,20 @@ function sectorColor(performance: string) {
 // Fetch track data with all required info
 async function fetchTrackData(sessionKey: string) {
   const openf1 = new OpenF1Service("https://api.openf1.org/v1");
-  
+
   const [positionsRes, sessionRes, sectorRes, lapRes] = await Promise.all([
     openf1.getDriverPositions(sessionKey),
     openf1.getSessionDetails(sessionKey),
     openf1.getSectorTimings(sessionKey),
     openf1.getLapInfo(sessionKey),
   ]);
-  
+
   const layout = sessionRes?.track_layout || {
     svgPath: "M40,160 Q60,40 150,40 Q240,40 260,160 Q150,180 40,160 Z",
     width: 300,
     height: 200,
   };
-  
+
   const positions = (positionsRes || []).map((pos: any) => ({
     driver_number: pos.driver_number,
     name: pos.driver_name || pos.broadcast_name || `#${pos.driver_number}`,
@@ -54,22 +54,22 @@ async function fetchTrackData(sessionKey: string) {
     y: pos.normalized_track_position_y ?? 0,
     color: pos.color || pos.team_colour || "#8884d8",
   }));
-  
+
   const sectorTimings = sectorRes || [];
   const lapInfo = lapRes || { currentLap: 1, totalLaps: 0, sectorTimes: [] };
-  
+
   return { positions, layout, sectorTimings, lapInfo };
 }
 
 // Memoize the marker component to prevent unnecessary renders
-const DriverMarker = React.memo(({ driver, cx, cy }) => {
+const DriverMarker = React.memo(function DriverMarker({ driver, cx, cy }: { driver: DriverPosition, cx: number, cy: number }) {
   return (
     <motion.g
       key={driver.driver_number}
       initial={{ x: cx - 30, y: cy, opacity: 0 }}
-      animate={{ 
-        x: cx, 
-        y: cy, 
+      animate={{
+        x: cx,
+        y: cy,
         opacity: 1,
         transition: {
           x: { type: "spring", stiffness: 100, damping: 20 },
@@ -104,25 +104,25 @@ const DriverMarker = React.memo(({ driver, cx, cy }) => {
 
 export default React.memo(function TrackMap() {
   const { colors } = useTheme();
-  const { 
-    telemetryState, 
-    updatePositions, 
+  const {
+    telemetryState,
+    updatePositions,
     updateRaceProgress,
-    connectionStatus 
+    connectionStatus
   } = useTelemetry();
-  
+
   // Track state
-  const [layout, setLayout] = useState({ svgPath: "M0,0", width: 300, height: 200 });
+  const [layout, setLayout] = useState<{ svgPath: string; width: number; height: number }>({ svgPath: "M0,0", width: 300, height: 200 });
   const [sectorTimeDisplay, setSectorTimeDisplay] = useState<SectorTimeDisplay[]>([]);
-  
+
   // Get session data from context
-  const { positions, raceProgress, sessionKey } = telemetryState;
-  
+  const { positions = [], raceProgress = { currentLap: 1, totalLaps: 0, sectorTimes: [] }, sessionKey = "" } = telemetryState;
+
   // UI state
   const [zoomLevel, setZoomLevel] = useState(1);
   const [panOffset, setPanOffset] = useState({ x: 0, y: 0 });
   const [isPanning, setIsPanning] = useState(false);
-  
+
   // Refs
   const svgRef = useRef<SVGSVGElement>(null);
   const lastPanPoint = useRef({ x: 0, y: 0 });
@@ -130,41 +130,41 @@ export default React.memo(function TrackMap() {
   // Fetch track layout, sector times, and initial positions
   useEffect(() => {
     if (!sessionKey) return;
-    
+
     let mounted = true;
-    
+
     async function load() {
       try {
-        const { positions, layout, sectorTimings, lapInfo } = await fetchTrackData(sessionKey);
-        
+        const { positions: fetchedPositions, layout: fetchedLayout, sectorTimings, lapInfo } = await fetchTrackData(sessionKey);
+
         if (mounted) {
           // Set track layout
-          setLayout(layout);
-          
+          setLayout(fetchedLayout);
+
           // Update positions in context
-          updatePositions(positions);
-          
+          updatePositions(fetchedPositions);
+
           // Process sector timing data
           setSectorTimeDisplay(
             [1, 2, 3].map((sectorNum) => {
               const best = sectorTimings
-                .filter((s) => s.sector === sectorNum)
-                .sort((a, b) => a.sector_time - b.sector_time)[0];
-                
+                .filter((s: any) => s.sector === sectorNum)
+                .sort((a: any, b: any) => a.sector_time - b.sector_time)[0];
+
               return best
                 ? {
-                    sector: sectorNum,
-                    time: best.sector_time,
-                    driver: best.driver_number,
-                    color: sectorColor(best.performance),
-                  }
+                  sector: sectorNum,
+                  time: best.sector_time,
+                  driver: best.driver_number,
+                  color: sectorColor(best.performance),
+                }
                 : {
-                    sector: sectorNum,
-                    color: "#666",
-                  };
+                  sector: sectorNum,
+                  color: "#666",
+                };
             })
           );
-          
+
           // Update race progress in context
           updateRaceProgress({
             currentLap: lapInfo.currentLap,
@@ -176,61 +176,78 @@ export default React.memo(function TrackMap() {
         console.error("Error fetching track data:", err);
       }
     }
-    
+
     load();
-    
+
     // Poll for updated data every second if WebSocket isn't available
-    const interval = connectionStatus.positions !== "open" ? setInterval(load, 1000) : null;
-    
+    const interval = connectionStatus.positions !== "open" ? setInterval(load, 1000) : undefined;
+
     return () => {
       mounted = false;
       if (interval) clearInterval(interval);
     };
-  }, [sessionKey, connectionStatus.positions]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [sessionKey, connectionStatus.positions, updatePositions, updateRaceProgress]);
 
   // Memoize pan handlers to prevent recreations
   const handlePanStart = useCallback((clientX: number, clientY: number) => {
     setIsPanning(true);
     lastPanPoint.current = { x: clientX, y: clientY };
   }, []);
-  
+
   const handlePanMove = useCallback((clientX: number, clientY: number) => {
     if (!isPanning) return;
-    
+
     const dx = clientX - lastPanPoint.current.x;
     const dy = clientY - lastPanPoint.current.y;
-    
+
     setPanOffset(prev => ({
       x: prev.x + dx / zoomLevel,
       y: prev.y + dy / zoomLevel
     }));
-    
+
     lastPanPoint.current = { x: clientX, y: clientY };
   }, [isPanning, zoomLevel]);
-  
+
   const handlePanEnd = useCallback(() => {
     setIsPanning(false);
   }, []);
-  
+
+  // Mouse/touch event listeners for panning
+  useEffect(() => {
+    if (!isPanning) return;
+
+    const handleMouseMove = (e: MouseEvent) => handlePanMove(e.clientX, e.clientY);
+    const handleTouchMove = (e: TouchEvent) => {
+      if (e.touches[0]) handlePanMove(e.touches[0].clientX, e.touches[0].clientY);
+    };
+    const handleUp = () => handlePanEnd();
+
+    window.addEventListener("mousemove", handleMouseMove);
+    window.addEventListener("touchmove", handleTouchMove, { passive: false });
+    window.addEventListener("mouseup", handleUp);
+    window.addEventListener("touchend", handleUp);
+
+    return () => {
+      window.removeEventListener("mousemove", handleMouseMove);
+      window.removeEventListener("touchmove", handleTouchMove);
+      window.removeEventListener("mouseup", handleUp);
+      window.removeEventListener("touchend", handleUp);
+    };
+  }, [isPanning, handlePanMove, handlePanEnd]);
+
   // Memoize zoom handlers
   const handleZoomIn = useCallback(() => setZoomLevel(prev => Math.min(prev * 1.2, 3)), []);
   const handleZoomOut = useCallback(() => setZoomLevel(prev => Math.max(prev / 1.2, 0.5)), []);
 
   // Memoize calculated driver positions for the map
   const driverPositions = useMemo(() => {
-    return positions.map((driver) => {
+    return positions.map((driver: DriverPosition) => {
       const cx = 40 + driver.x * 220;
       const cy = 160 - driver.y * 120;
       return { driver, cx, cy };
     });
   }, [positions]);
-
-  // Memoize lap markers to avoid recalculation
-  const lapMarkers = useMemo(() => {
-    // Generate lap markers based on raceProgress.totalLaps
-    // ...
-    return null; // Replace with actual markers
-  }, [raceProgress.totalLaps]);
 
   return (
     <motion.div
@@ -238,8 +255,8 @@ export default React.memo(function TrackMap() {
       animate={{ opacity: 1 }}
       transition={{ duration: 0.4, delay: 0.2 }}
     >
-      <Card 
-        className="w-full h-full card-transition card-hover" 
+      <Card
+        className="w-full h-full card-transition card-hover"
         style={{ borderColor: colors.primary, background: colors.primary + "10" }}
       >
         <CardHeader className="p-responsive-md">
@@ -250,10 +267,10 @@ export default React.memo(function TrackMap() {
               </motion.div>
               <span>Track Map</span>
             </CardTitle>
-            
+
             <div className="flex items-center gap-2">
               <ConnectionStatusIndicator service="positions" size="sm" />
-              <AnimatedButton 
+              <AnimatedButton
                 variant="ghost"
                 size="sm"
                 onClick={handleZoomIn}
@@ -273,11 +290,11 @@ export default React.memo(function TrackMap() {
               </AnimatedButton>
             </div>
           </div>
-          
+
           <div className="flex flex-col sm:flex-row items-start sm:items-center gap-responsive-sm mt-2">
-            <LapCounter 
-              currentLap={raceProgress.currentLap} 
-              totalLaps={raceProgress.totalLaps} 
+            <LapCounter
+              currentLap={raceProgress.currentLap}
+              totalLaps={raceProgress.totalLaps}
             />
             <div className="flex flex-wrap gap-2">
               {sectorTimeDisplay.map(
@@ -297,9 +314,9 @@ export default React.memo(function TrackMap() {
             </div>
           </div>
         </CardHeader>
-        
+
         <CardContent className="p-responsive-md">
-          <div 
+          <div
             className="flex justify-center items-center overflow-hidden touch-manipulation"
             style={{ cursor: isPanning ? 'grabbing' : 'grab' }}
             onMouseDown={(e) => handlePanStart(e.clientX, e.clientY)}
@@ -307,11 +324,11 @@ export default React.memo(function TrackMap() {
               if (e.touches[0]) handlePanStart(e.touches[0].clientX, e.touches[0].clientY)
             }}
           >
-            <svg 
+            <svg
               ref={svgRef}
-              viewBox="0 0 300 200" 
+              viewBox="0 0 300 200"
               className="w-full max-w-full h-auto"
-              style={{ 
+              style={{
                 maxHeight: "50vh",
                 touchAction: 'none'
               }}
@@ -330,7 +347,7 @@ export default React.memo(function TrackMap() {
                   animate={{ pathLength: 1 }}
                   transition={{ duration: 1.5, ease: "easeInOut" }}
                 />
-                
+
                 {/* Driver markers with Framer Motion animation */}
                 <AnimatePresence>
                   {driverPositions.map(({ driver, cx, cy }) => (
@@ -340,11 +357,11 @@ export default React.memo(function TrackMap() {
               </g>
             </svg>
           </div>
-          
+
           {/* Loading state for track layout */}
           {!layout.svgPath || layout.svgPath === "M0,0" ? (
             <div className="flex items-center justify-center h-64 w-full">
-              <motion.div 
+              <motion.div
                 className="flex flex-col items-center"
                 initial={{ opacity: 0 }}
                 animate={{ opacity: 1 }}
@@ -355,15 +372,15 @@ export default React.memo(function TrackMap() {
               </motion.div>
             </div>
           ) : null}
-          
+
           {/* Fallback message for no positions data */}
           {positions.length === 0 && connectionStatus.positions !== "connecting" && (
             <div className="absolute inset-0 flex items-center justify-center bg-background/70 z-10">
               <div className="text-center p-4">
                 <p className="font-semibold mb-1">No position data available</p>
                 <p className="text-sm text-muted-foreground">
-                  {connectionStatus.positions === "closed" || connectionStatus.positions === "error" ? 
-                    "Connection to position service unavailable" : 
+                  {connectionStatus.positions === "closed" || connectionStatus.positions === "error" ?
+                    "Connection to position service unavailable" :
                     "Waiting for position data..."}
                 </p>
               </div>

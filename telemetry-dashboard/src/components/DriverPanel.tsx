@@ -187,4 +187,5 @@ function DriverPanel({ driverNumber, sessionKey, showDetails = true }: DriverPan
   );
 }
 
+// Export a memoized version as default
 export default React.memo(DriverPanel);

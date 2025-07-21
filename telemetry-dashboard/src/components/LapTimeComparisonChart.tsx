@@ -6,6 +6,7 @@ import { OpenF1Service } from "@/lib/api/openf1";
 import { LineChart, Line, XAxis, YAxis, Tooltip, Legend, ResponsiveContainer, ReferenceLine } from "recharts";
 import { useTheme } from "@/components/ThemeProvider";
 import { Clock, ArrowUpDown, Download, AlertTriangle } from "lucide-react";
+import { motion } from "framer-motion"; // Add this import for motion div
 import AnimatedButton from "@/components/AnimatedButton";
 import ConnectionStatusIndicator from "@/components/ConnectionStatusIndicator";
 import { Loader2 } from "lucide-react";
@@ -34,6 +35,9 @@ function LapTimeComparisonChart({
   const [touchPoints, setTouchPoints] = useState<{x: number, y: number}[]>([]);
   const chartRef = useRef<HTMLDivElement>(null);
   
+  // Get connection status from context
+  const { connectionStatus } = useTelemetry();
+  
   // Fetch lap times with useEffect
   useEffect(() => {
     if (!sessionKey || !driverNumbers.length) return;
@@ -48,13 +52,13 @@ function LapTimeComparisonChart({
         const [laps, info] = await Promise.all([
           openf1.getLapTimes(sessionKey, driverNumber),
           openf1.getDriverInfo(sessionKey, driverNumber),
-        ])
+        ]);
         const driverName =
           (Array.isArray(info) ? info[0]?.broadcast_name : info?.broadcast_name) ||
-          `#${driverNumber}`
+          `#${driverNumber}`;
         const color =
           (Array.isArray(info) ? info[0]?.color : info?.color) ||
-          "#8884d8"
+          "#8884d8";
         return {
           name: driverName,
           color,
@@ -63,7 +67,7 @@ function LapTimeComparisonChart({
             lap: l.lap_number,
             time: l.lap_time,
           })),
-        }
+        };
       })
     )
       .then(setSeries)
@@ -99,8 +103,27 @@ function LapTimeComparisonChart({
   const exportToCSV = useCallback(() => {
     if (!series.length) return;
     
-    // CSV export logic
-    // ...
+    // Create CSV content
+    const headers = ["Lap", ...series.map(s => s.name)].join(",");
+    const rows = chartData.map(row => {
+      return [
+        row.lap,
+        ...series.map(s => row[s.name] !== null ? row[s.name].toFixed(3) : "")
+      ].join(",");
+    });
+    
+    const csvContent = [headers, ...rows].join("\n");
+    const blob = new Blob([csvContent], { type: "text/csv;charset=utf-8;" });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement("a");
+    
+    link.setAttribute("href", url);
+    link.setAttribute("download", `lap_times_${sessionKey}.csv`);
+    link.style.visibility = 'hidden';
+    
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
   }, [series]);
 
   // Memoize chart data calculation (expensive operation)
@@ -126,6 +149,14 @@ function LapTimeComparisonChart({
   const activeSeries = useMemo(() => {
     return series.filter(s => activeDrivers.includes(s.driverNumber));
   }, [series, activeDrivers]);
+
+  // Function to handle legend clicks - fixed typing issue
+  const handleLegendClick = useCallback((e: any) => {
+    const driverEntry = series.find(s => s.name === e.dataKey);
+    if (driverEntry) {
+      toggleDriver(driverEntry.driverNumber);
+    }
+  }, [series, toggleDriver]);
 
   return (
     <Card 
@@ -206,9 +237,31 @@ function LapTimeComparisonChart({
             <button 
               className="px-4 py-2 rounded bg-primary text-white mt-4"
               onClick={() => {
-                setLoading(true)
-                setError(null)
-                // Retry logic
+                setLoading(true);
+                setError(null);
+                // Retry logic - re-trigger the effect
+                const openf1 = new OpenF1Service("https://api.openf1.org/v1");
+                Promise.all(
+                  driverNumbers.map(async (driverNumber) => {
+                    const [laps, info] = await Promise.all([
+                      openf1.getLapTimes(sessionKey, driverNumber),
+                      openf1.getDriverInfo(sessionKey, driverNumber),
+                    ]);
+                    // Rest of the logic...
+                    return {
+                      name: (Array.isArray(info) ? info[0]?.broadcast_name : info?.broadcast_name) || `#${driverNumber}`,
+                      color: (Array.isArray(info) ? info[0]?.color : info?.color) || "#8884d8",
+                      driverNumber,
+                      data: (laps || []).map((l: OpenF1LapTime) => ({
+                        lap: l.lap_number,
+                        time: l.lap_time,
+                      })),
+                    };
+                  })
+                )
+                  .then(setSeries)
+                  .catch((err) => setError((err as Error).message))
+                  .finally(() => setLoading(false));
               }}
             >
               Retry
@@ -265,7 +318,7 @@ function LapTimeComparisonChart({
                   wrapperStyle={{ fontFamily: "Formula1", textTransform: "uppercase", fontSize: 14 }} 
                   verticalAlign="bottom"
                   height={40}
-                  onClick={(e) => toggleDriver(e.dataKey)} // Make legend items clickable
+                  onClick={handleLegendClick} // Fixed typing issue
                 />
                 {series
                   .filter(s => activeDrivers.includes(s.driverNumber))
@@ -335,7 +388,7 @@ function LapTimeComparisonChart({
         )}
       </CardContent>
     </Card>
-  )
+  );
 }
 
 export default React.memo(LapTimeComparisonChart);

@@ -1,12 +1,21 @@
 "use client"
 
 import { Suspense } from "react"
-import PerformanceAnalyticsDashboard from "@/components/PerformanceAnalyticsDashboard"
+import dynamic from "next/dynamic"
 import Sidebar from "@/components/layout/Sidebar"
 import Header from "@/components/layout/Header"
 import MobileNav from "@/components/layout/MobileNav"
 import { useTheme } from "@/components/ThemeProvider"
 import { TelemetryProvider } from "@/context/TelemetryDataContext"
+
+// Dynamically import performance analytics dashboard
+const PerformanceAnalyticsDashboard = dynamic(
+  () => import("@/components/PerformanceAnalyticsDashboard"),
+  {
+    loading: () => <AnalyticsLoadingSkeleton />,
+    ssr: false
+  }
+)
 
 export default function AnalyticsDashboardPage() {
   const sessionKey = "latest"

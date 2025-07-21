@@ -1,12 +1,32 @@
 "use client"
 
-import { useEffect, useState } from "react"
+import { useEffect, useState, Suspense } from "react"
+import dynamic from "next/dynamic"
 import Sidebar from "@/components/layout/Sidebar"
 import Header from "@/components/layout/Header"
 import MobileNav from "@/components/layout/MobileNav"
-import Dashboard from "@/components/Dashboard" 
 import { OpenF1Service } from "@/lib/api/openf1"
 import type { OpenF1WeatherData } from "@/lib/api/types"
+import LoadingSpinner from "@/components/ui/LoadingSpinner"
+
+// Dynamically import heavy components
+const Dashboard = dynamic(() => import("@/components/Dashboard"), {
+  loading: () => <DashboardSkeleton />,
+  ssr: false // Disable server-side rendering for this component
+})
+
+function DashboardSkeleton() {
+  return (
+    <div className="grid grid-cols-1 gap-3 sm:gap-4 md:gap-6">
+      <div className="col-span-1 h-40 bg-muted/30 rounded-md animate-pulse"></div>
+      <div className="grid grid-cols-1 md:grid-cols-2 gap-3 sm:gap-4 md:gap-6 col-span-1">
+        <div className="h-64 bg-muted/30 rounded-md animate-pulse"></div>
+        <div className="h-64 bg-muted/30 rounded-md animate-pulse"></div>
+      </div>
+      <div className="col-span-1 h-80 bg-muted/30 rounded-md animate-pulse"></div>
+    </div>
+  )
+}
 
 export default function LiveDashboardPage() {
   const [weather, setWeather] = useState<OpenF1WeatherData | null>(null)
@@ -48,11 +68,13 @@ export default function LiveDashboardPage() {
         </div>
         <main className="flex-1 p-2 sm:p-4 md:p-6 w-full max-w-full overflow-hidden">
           <h1 className="sr-only">F1 Telemetry Dashboard</h1>
-          <Dashboard
-            sessionKey={sessionKey}
-            driverNumber={driverNumber}
-            driverNumbers={driverNumbers}
-          />
+          <Suspense fallback={<DashboardSkeleton />}>
+            <Dashboard
+              sessionKey={sessionKey}
+              driverNumber={driverNumber}
+              driverNumbers={driverNumbers}
+            />
+          </Suspense>
         </main>
       </div>
     </>

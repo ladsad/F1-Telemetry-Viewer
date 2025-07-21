@@ -1,10 +1,45 @@
 "use client"
 
-import { useState, useEffect } from "react"
-import LapTimeComparisonChart from "@/components/LapTimeComparisonChart"
-import DeltaTimeChart from "@/components/DeltaTimeChart"
-import RaceProgressScrubBar from "@/components/RaceProgressScrubBar"
+import { useState, useEffect, Suspense } from "react"
+import dynamic from "next/dynamic"
 import { useTelemetry } from "@/context/TelemetryDataContext"
+
+// Dynamically import heavy chart components
+const LapTimeComparisonChart = dynamic(
+  () => import("@/components/LapTimeComparisonChart"),
+  {
+    loading: () => <ChartSkeleton height="300px" label="Loading lap time comparison..." />,
+    ssr: false
+  }
+)
+
+const DeltaTimeChart = dynamic(
+  () => import("@/components/DeltaTimeChart"),
+  {
+    loading: () => <ChartSkeleton height="300px" label="Loading delta times..." />,
+    ssr: false
+  }
+)
+
+const RaceProgressScrubBar = dynamic(
+  () => import("@/components/RaceProgressScrubBar"),
+  {
+    loading: () => <ChartSkeleton height="150px" label="Loading race progress..." />,
+    ssr: false
+  }
+)
+
+// Simple loading skeleton for chart components
+function ChartSkeleton({ height = "300px", label = "Loading..." }) {
+  return (
+    <div className="rounded-md border p-4 my-4">
+      <div className="flex flex-col items-center justify-center" style={{ height }}>
+        <div className="w-8 h-8 rounded-full border-2 border-t-transparent border-primary animate-spin mb-2"></div>
+        <p className="text-sm text-muted-foreground">{label}</p>
+      </div>
+    </div>
+  )
+}
 
 const METRICS = [
   { key: "lapTime", label: "Lap Time Comparison" },
@@ -96,24 +131,32 @@ export default function PerformanceAnalyticsDashboard({
       {/* Analytics tools composition */}
       <div className="space-y-6">
         {(selectedMetric === "lapTime" || selectedMetric === "all") && (
-          <LapTimeComparisonChart
-            sessionKey={sessionKey}
-            driverNumbers={selectedDrivers}
-          />
+          <Suspense fallback={<ChartSkeleton height="300px" label="Loading lap time comparison..." />}>
+            <LapTimeComparisonChart
+              sessionKey={sessionKey}
+              driverNumbers={selectedDrivers}
+            />
+          </Suspense>
         )}
+        
         {(selectedMetric === "deltaTime" || selectedMetric === "all") && (
-          <DeltaTimeChart
-            sessionKey={sessionKey}
-            driverNumbers={selectedDrivers}
-            referenceDriver={referenceDriver}
-          />
+          <Suspense fallback={<ChartSkeleton height="300px" label="Loading delta times..." />}>
+            <DeltaTimeChart
+              sessionKey={sessionKey}
+              driverNumbers={selectedDrivers}
+              referenceDriver={referenceDriver}
+            />
+          </Suspense>
         )}
+        
         {(selectedMetric === "raceProgress" || selectedMetric === "all") && (
-          <RaceProgressScrubBar
-            sessionKey={sessionKey}
-            value={lap}
-            onChange={setLap}
-          />
+          <Suspense fallback={<ChartSkeleton height="150px" label="Loading race progress..." />}>
+            <RaceProgressScrubBar
+              sessionKey={sessionKey}
+              value={lap}
+              onChange={setLap}
+            />
+          </Suspense>
         )}
       </div>
     </div>

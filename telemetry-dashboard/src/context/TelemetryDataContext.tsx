@@ -454,8 +454,40 @@ export function TelemetryProvider({ children }: { children: React.ReactNode }) {
   
   // Helper to create efficient time series data structure
   function createTimeSeriesStore(data: TelemetryDataPoint[]): TelemetryTimeSeriesData {
-    // Implementation as in useHistoricTelemetry
-    // ... (same implementation)
+    // Sort data by timestamp
+    const sortedData = [...data].sort((a, b) => a.timestamp - b.timestamp);
+
+    // Create indexed array for direct access by index
+    const indexedData = sortedData.map(item => ({
+      speed: item.speed || 0,
+      throttle: item.throttle || 0,
+      brake: item.brake || 0,
+      gear: item.gear || 0,
+      rpm: item.rpm || 0,
+      drs: !!item.drs,
+      timestamp: item.timestamp
+    }));
+
+    // Create timestamp index for quick lookup
+    const sortedTimestamps: number[] = [];
+    const timestampMap = new Map<number, number>();
+
+    indexedData.forEach((item, index) => {
+      sortedTimestamps.push(item.timestamp);
+      timestampMap.set(item.timestamp, index);
+    });
+
+    // Create LRU cache for recent queries
+    const queryCache = new Map<string, any>();
+    const CACHE_SIZE = 100;
+
+    return {
+      indexedData,
+      sortedTimestamps,
+      timestampMap,
+      queryCache,
+      cacheSize: CACHE_SIZE
+    };
   }
   
   // Context value

@@ -1,15 +1,34 @@
 "use client"
 
-import { useState, useEffect } from "react"
+import { useState, useEffect, Suspense } from "react"
+import dynamic from "next/dynamic"
 import Sidebar from "@/components/layout/Sidebar"
 import Header from "@/components/layout/Header"
 import MobileNav from "@/components/layout/MobileNav"
-import TelemetryDisplay from "@/components/TelemetryDisplay"
-import TrackMap from "@/components/TrackMap"
-import { DriverPanel } from "@/components/DriverPanel"
-import { WeatherOverlay } from "@/components/WeatherOverlay"
 import { OpenF1Service } from "@/lib/api/openf1"
 import { TelemetryProvider, useTelemetry } from "@/context/TelemetryDataContext"
+import LoadingSpinner from "@/components/ui/LoadingSpinner"
+
+// Dynamically import heavy components
+const TelemetryDisplay = dynamic(() => import("@/components/TelemetryDisplay"), {
+  loading: () => <div className="h-64 bg-muted/30 rounded-md animate-pulse"></div>,
+  ssr: false
+})
+
+const TrackMap = dynamic(() => import("@/components/TrackMap"), {
+  loading: () => <div className="h-64 bg-muted/30 rounded-md animate-pulse"></div>,
+  ssr: false
+})
+
+const DriverPanel = dynamic(() => import("@/components/DriverPanel").then(mod => ({ default: mod.DriverPanel })), {
+  loading: () => <div className="h-64 bg-muted/30 rounded-md animate-pulse"></div>,
+  ssr: false
+})
+
+const WeatherOverlay = dynamic(() => import("@/components/WeatherOverlay").then(mod => ({ default: mod.WeatherOverlay })), {
+  loading: () => <div className="h-48 bg-muted/30 rounded-md animate-pulse"></div>,
+  ssr: false
+})
 
 // Wrap components that need telemetry data
 function LiveTelemetryContent() {
@@ -56,14 +75,22 @@ function LiveTelemetryContent() {
       {/* Main live content */}
       <div className="grid grid-cols-1 gap-3 sm:gap-4 md:gap-6">
         <div className="col-span-1">
-          <TelemetryDisplay fallbackApiUrl="/api/telemetry/latest" />
+          <Suspense fallback={<div className="h-64 bg-muted/30 rounded-md animate-pulse"></div>}>
+            <TelemetryDisplay fallbackApiUrl="/api/telemetry/latest" />
+          </Suspense>
         </div>
         <div className="grid grid-cols-1 md:grid-cols-2 gap-3 sm:gap-4 md:gap-6">
-          <TrackMap />
-          <DriverPanel />
+          <Suspense fallback={<div className="h-64 bg-muted/30 rounded-md animate-pulse"></div>}>
+            <TrackMap />
+          </Suspense>
+          <Suspense fallback={<div className="h-64 bg-muted/30 rounded-md animate-pulse"></div>}>
+            <DriverPanel />
+          </Suspense>
         </div>
         <div className="col-span-1">
-          <WeatherOverlay />
+          <Suspense fallback={<div className="h-48 bg-muted/30 rounded-md animate-pulse"></div>}>
+            <WeatherOverlay />
+          </Suspense>
         </div>
       </div>
     </div>
@@ -83,10 +110,31 @@ export default function LiveTelemetryPage() {
         </div>
         <main className="flex-1 p-2 sm:p-4 md:p-6 w-full max-w-full overflow-x-hidden">
           <TelemetryProvider initialSessionKey={sessionKey}>
-            <LiveTelemetryContent />
+            <Suspense fallback={<LiveDashboardSkeleton />}>
+              <LiveTelemetryContent />
+            </Suspense>
           </TelemetryProvider>
         </main>
       </div>
     </>
+  )
+}
+
+function LiveDashboardSkeleton() {
+  return (
+    <div className="flex flex-col gap-4">
+      <div className="flex justify-between items-center mb-4">
+        <div className="h-8 w-48 bg-muted/30 rounded-md animate-pulse"></div>
+        <div className="h-8 w-32 bg-muted/30 rounded-md animate-pulse"></div>
+      </div>
+      <div className="grid grid-cols-1 gap-4">
+        <div className="h-64 bg-muted/30 rounded-md animate-pulse"></div>
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+          <div className="h-64 bg-muted/30 rounded-md animate-pulse"></div>
+          <div className="h-64 bg-muted/30 rounded-md animate-pulse"></div>
+        </div>
+        <div className="h-48 bg-muted/30 rounded-md animate-pulse"></div>
+      </div>
+    </div>
   )
 }

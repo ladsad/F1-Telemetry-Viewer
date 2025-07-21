@@ -95,13 +95,13 @@ export interface DriverPosition {
  * Weather data for current and forecast conditions
  */
 export interface WeatherData {
-  air_temperature: number;
-  track_temperature: number;
-  humidity: number;
-  pressure: number;
-  wind_speed: number;
-  wind_direction: string;
-  rainfall: number;
+  rainfall?: number;
+  air_temperature?: number;
+  track_temperature?: number;
+  humidity?: number;
+  pressure?: number;
+  wind_speed?: number;
+  wind_direction?: string;
   timestamp?: number;
   forecast?: WeatherForecast[];
 }
@@ -184,7 +184,14 @@ export interface TireData {
 /**
  * Connection status
  */
-export type ConnectionStatus = 'open' | 'connecting' | 'closed' | 'error';
+export type ConnectionStatus = 'open' | 'closed' | 'connecting' | 'error';
+
+export interface ConnectionStatusState {
+  telemetry: ConnectionStatus;
+  positions: ConnectionStatus;
+  timing: ConnectionStatus;
+  weather: ConnectionStatus;
+}
 
 // =============================================================
 // Component Prop Types
@@ -196,6 +203,7 @@ export type ConnectionStatus = 'open' | 'connecting' | 'closed' | 'error';
 export interface TelemetryDisplayProps {
   data?: TelemetryData;
   fallbackApiUrl?: string;
+  refreshIntervalMs?: number;
   isOffline?: boolean;
   theme?: {
     primary: string;
@@ -267,8 +275,8 @@ export interface RaceProgressScrubBarProps {
  * Props for SessionComparison component
  */
 export interface SessionComparisonProps {
-  selectedSessions?: string[];
-  metricType?: 'lap_time' | 'speed' | 'throttle' | 'brake';
+  selectedSessions?: string[]; // This should be session keys, not full Session objects
+  metricType?: string;
 }
 
 /**
@@ -283,13 +291,13 @@ export interface PerformanceAnalyticsDashboardProps {
  * Props for TelemetryTable and TelemetryHistoryGrid components
  */
 export interface TelemetryTableProps {
-  data?: TelemetryDataPoint[];
+  data?: TelemetryData[];
   title?: string;
   maxHeight?: number;
   showConnectionStatus?: boolean;
   virtualScrollOptions?: {
-    itemSize?: number;
-    overscanCount?: number;
+    itemSize: number;
+    overscanCount: number;
   };
 }
 
@@ -306,9 +314,10 @@ export interface TelemetryHistoryGridProps {
  * Props for ConnectionStatusIndicator component
  */
 export interface ConnectionStatusIndicatorProps {
-  service: 'telemetry' | 'positions' | 'timing';
-  size?: 'sm' | 'md' | 'lg';
+  service?: 'all' | 'telemetry' | 'positions' | 'timing' | 'weather';
   showLabel?: boolean;
+  size?: 'sm' | 'md' | 'lg';
+  position?: 'inline' | 'floating';
 }
 
 /**
@@ -341,7 +350,10 @@ export interface SessionDetailDialogProps {
 export interface StatusIndicatorProps {
   label: string;
   value: string | number;
-  icon: React.ReactElement;
+  icon: React.ReactElement<{
+    className?: string;
+    [key: string]: any;
+  }>;
   color?: string;
 }
 
@@ -374,6 +386,15 @@ export interface TireStrategyChartProps {
  */
 export interface WeatherTrendChartProps {
   sessionKey: string;
+}
+
+/**
+ * Props for LoadingSpinner component
+ */
+export interface LoadingSpinnerProps {
+  size?: 'sm' | 'md' | 'lg';
+  label?: string;
+  className?: string;
 }
 
 // =============================================================
@@ -470,4 +491,37 @@ export interface TelemetryVirtualizationResult<T> {
   isProcessing: boolean;
   totalCount: number;
   processedCount: number;
+}
+
+/**
+ * OpenF1 API event type
+ */
+export interface OpenF1Event {
+  type: "overtake" | "pit" | "crash" | "flag" | string;
+  lap_number: number;
+  description?: string;
+  timestamp?: number;
+  session_key?: string;
+  driver_number?: number;
+}
+
+/**
+ * Weather alert properties for components
+ */
+export interface WeatherAlertProps {
+  weather: WeatherData; 
+}
+
+/**
+ * Weather impact properties for components
+ */
+export interface WeatherImpactProps {
+  weather: WeatherData;
+  impact: {
+    rain: { timeLoss: number };
+    temp: { timeLoss: number };
+    wind: { timeLoss: number };
+    total: number;
+    avgLap: number;
+  };
 }

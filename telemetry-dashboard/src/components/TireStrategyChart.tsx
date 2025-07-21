@@ -1,6 +1,6 @@
 "use client"
 
-import { useEffect, useState } from "react";
+import React, { useEffect, useState } from "react";
 import { Card, CardHeader, CardTitle, CardContent } from "@/components/ui/card";
 import { OpenF1Service } from "@/lib/api/openf1";
 import { useTheme } from "@/components/ThemeProvider";

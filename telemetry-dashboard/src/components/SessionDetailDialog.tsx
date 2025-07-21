@@ -59,7 +59,7 @@ export default function SessionDetailDialog({
         </DialogHeader>
         
         <Tabs value={activeTab} onValueChange={setActiveTab}>
-          <TabsList>
+          <TabsList className="grid w-full grid-cols-3">
             <TabsTrigger value="telemetry">Telemetry History</TabsTrigger>
             <TabsTrigger value="laptimes">Lap Times</TabsTrigger>
             <TabsTrigger value="tires">Tire Strategy</TabsTrigger>
@@ -76,6 +76,7 @@ export default function SessionDetailDialog({
               <LapTimeComparisonChart 
                 sessionKey={sessionKey} 
                 driverNumbers={driverNumbers} 
+                highlightedLap={undefined}
               />
             </Suspense>
           </TabsContent>

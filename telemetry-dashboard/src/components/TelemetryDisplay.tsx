@@ -56,7 +56,8 @@ const MetricDisplay = React.memo(function MetricDisplay({ icon, value, unit, lab
   );
 });
 
-export default function TelemetryDisplay(props: TelemetryDisplayProps) {
+// Export with memo to prevent re-renders when parent components update
+export default React.memo(function TelemetryDisplay(props: TelemetryDisplayProps) {
   const { colors } = useTheme();
   
   // Get data and connection status from context
@@ -216,7 +217,7 @@ export default function TelemetryDisplay(props: TelemetryDisplayProps) {
                 <SpeedometerIcon className="w-6 h-6" />
               </motion.div>
               <span>Live Telemetry</span>
-              {connectionIndicator()}
+              {connectionIndicator}
             </CardTitle>
             
             {showRefreshControl && (
@@ -293,7 +294,4 @@ export default function TelemetryDisplay(props: TelemetryDisplayProps) {
       </Card>
     </motion.div>
   );
-}
-
-// Export with memo to prevent re-renders when parent components update
-export default React.memo(TelemetryDisplay);
+});

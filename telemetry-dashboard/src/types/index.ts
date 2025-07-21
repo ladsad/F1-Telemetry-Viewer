@@ -463,18 +463,51 @@ export interface TelemetryContextType {
  * Return type for useHistoricPlayback hook
  */
 export interface HistoricPlaybackControls {
+  // Basic controls
   playing: boolean;
   play: () => void;
   pause: () => void;
   toggle: () => void;
   speed: number;
   setSpeed: (speed: number) => void;
+  
+  // Position controls
   currentIdx: number;
   setCurrentIdx: (idx: number) => void;
   stepBack: () => void;
   stepForward: () => void;
+  skipToStart: () => void; // Add this missing property
+  skipToEnd: () => void;   // Add this missing property
+  
+  // State queries
   canStepBack: boolean;
   canStepForward: boolean;
+  progress: number;
+  isAtStart: boolean;
+  isAtEnd: boolean;
+  
+  // Advanced controls
+  seekToProgress: (progress: number) => void;
+  seekToTime: (timestamp: number, timestamps?: number[]) => void;
+  
+  // Synchronization
+  getSyncState: () => PlaybackSyncState; // Add this missing property
+  applySyncState: (state: PlaybackSyncState) => void; // Add this missing property
+  
+  // Metadata
+  totalFrames: number;
+}
+
+/**
+ * Playback synchronization state
+ */
+export interface PlaybackSyncState {
+  currentIdx: number;
+  playing: boolean;
+  speed: number;
+  totalFrames: number;
+  progress: number;
+  timestamp?: number;
 }
 
 /**

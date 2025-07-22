@@ -72,40 +72,60 @@ function AnalyticsContent() {
   const driverNumbers = [1, 16, 44, 63]
 
   return (
-    <div className="space-y-6">
-      <h1 className="text-2xl font-bold font-formula1">Performance Analytics</h1>
+    <div className="space-y-4 sm:space-y-6">
+      <div className="flex flex-col space-y-2 sm:space-y-0 sm:flex-row sm:items-center sm:justify-between">
+        <h1 className="text-xl sm:text-2xl font-bold font-formula1">Performance Analytics</h1>
+        <div className="text-xs sm:text-sm text-muted-foreground">
+          Real-time F1 performance data
+        </div>
+      </div>
       
-      {/* Main Analytics Dashboard */}
-      <Suspense fallback={<AnalyticsLoadingSkeleton />}>
-        <PerformanceAnalyticsDashboard sessionKey={sessionKey} />
-      </Suspense>
-
-      {/* Comparison Charts Grid */}
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-        <Suspense fallback={<ChartLoadingSkeleton title="Lap Time Comparison" />}>
-          <LapTimeComparisonChart
-            sessionKey={sessionKey}
-            driverNumbers={driverNumbers}
-          />
+      {/* Main Analytics Dashboard - Full width on mobile */}
+      <div className="w-full">
+        <Suspense fallback={<AnalyticsLoadingSkeleton />}>
+          <PerformanceAnalyticsDashboard sessionKey={sessionKey} />
         </Suspense>
+      </div>
 
-        <Suspense fallback={<ChartLoadingSkeleton title="Delta Time Analysis" />}>
-          <DeltaTimeChart
-            sessionKey={sessionKey}
-            driverNumbers={driverNumbers}
-          />
-        </Suspense>
+      {/* Mobile-first Comparison Charts Grid */}
+      <div className="space-y-4 sm:space-y-6">
+        <h2 className="text-lg sm:text-xl font-semibold font-formula1 border-b pb-2">
+          Comparison Charts
+        </h2>
+        
+        {/* Stack charts vertically on mobile, side-by-side on larger screens */}
+        <div className="grid grid-cols-1 gap-4 sm:gap-6 xl:grid-cols-2">
+          <div className="w-full">
+            <Suspense fallback={<ChartLoadingSkeleton title="Lap Time Comparison" />}>
+              <LapTimeComparisonChart
+                sessionKey={sessionKey}
+                driverNumbers={driverNumbers}
+              />
+            </Suspense>
+          </div>
 
-        <Suspense fallback={<ChartLoadingSkeleton title="Tire Strategy" />}>
-          <TireStrategyChart
-            sessionKey={sessionKey}
-            driverNumber={driverNumbers[0]}
-          />
-        </Suspense>
+          <div className="w-full">
+            <Suspense fallback={<ChartLoadingSkeleton title="Delta Time Analysis" />}>
+              <DeltaTimeChart
+                sessionKey={sessionKey}
+                driverNumbers={driverNumbers}
+              />
+            </Suspense>
+          </div>
 
-        <div className="p-6 border rounded-lg">
-          <h3 className="font-semibold mb-4">Additional Analytics</h3>
-          <p className="text-muted-foreground">More analytics components coming soon...</p>
+          <div className="w-full">
+            <Suspense fallback={<ChartLoadingSkeleton title="Tire Strategy" />}>
+              <TireStrategyChart
+                sessionKey={sessionKey}
+                driverNumber={driverNumbers[0]}
+              />
+            </Suspense>
+          </div>
+
+          <div className="w-full p-4 sm:p-6 border rounded-lg">
+            <h3 className="font-semibold mb-3 sm:mb-4 text-sm sm:text-base">Additional Analytics</h3>
+            <p className="text-muted-foreground text-xs sm:text-sm">More analytics components coming soon...</p>
+          </div>
         </div>
       </div>
     </div>

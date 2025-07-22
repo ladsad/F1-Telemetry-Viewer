@@ -229,7 +229,7 @@ function AnalyticsLoadingSkeleton() {
   )
 }
 
-// Dashboard content with progressive loading
+// Dashboard content with enhanced mobile responsiveness
 function DashboardContent({ weather, sessionKey, driverNumber, driverNumbers }: {
   weather: OpenF1WeatherData | null;
   sessionKey: string;
@@ -258,19 +258,20 @@ function DashboardContent({ weather, sessionKey, driverNumber, driverNumbers }: 
   }, [])
 
   return (
-    <div className="space-y-6">
-      {/* Core Dashboard Section - Always Loaded */}
-      <section className="space-y-4">
+    <div className="space-y-4 sm:space-y-6">
+      {/* Core Dashboard Section - Enhanced mobile layout */}
+      <section className="space-y-3 sm:space-y-4">
         <div className="flex items-center justify-between">
-          <h2 className="text-xl font-semibold font-formula1">Live Telemetry</h2>
+          <h2 className="text-lg sm:text-xl font-semibold font-formula1 truncate">Live Telemetry</h2>
           <Button
             variant="ghost"
             size="sm"
             onClick={() => toggleSection('core')}
-            className="flex items-center gap-2"
+            className="flex items-center gap-1 sm:gap-2 text-xs sm:text-sm shrink-0"
           >
-            {expandedSections.core ? <ChevronUp className="w-4 h-4" /> : <ChevronDown className="w-4 h-4" />}
-            {expandedSections.core ? 'Collapse' : 'Expand'}
+            {expandedSections.core ? <ChevronUp className="w-3 h-3 sm:w-4 sm:h-4" /> : <ChevronDown className="w-3 h-3 sm:w-4 sm:h-4" />}
+            <span className="hidden sm:inline">{expandedSections.core ? 'Collapse' : 'Expand'}</span>
+            <span className="sm:hidden">{expandedSections.core ? '−' : '+'}</span>
           </Button>
         </div>
 
@@ -283,14 +284,14 @@ function DashboardContent({ weather, sessionKey, driverNumber, driverNumbers }: 
               transition={{ duration: 0.3 }}
               className="overflow-hidden"
             >
-              <div className="grid grid-cols-1 gap-4">
+              <div className="space-y-3 sm:space-y-4">
                 {/* Primary Telemetry Display */}
                 <Suspense fallback={<TelemetryLoadingSkeleton />}>
                   <TelemetryDisplay fallbackApiUrl="/api/telemetry/latest" />
                 </Suspense>
 
-                {/* Track and Driver Information */}
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                {/* Mobile-optimized grid layout */}
+                <div className="grid grid-cols-1 gap-3 sm:gap-4 lg:grid-cols-2">
                   <Suspense fallback={<MapLoadingSkeleton />}>
                     <TrackMap />
                   </Suspense>
@@ -310,21 +311,22 @@ function DashboardContent({ weather, sessionKey, driverNumber, driverNumbers }: 
         </AnimatePresence>
       </section>
 
-      {/* Analytics Section - Lazy Loaded */}
-      <section ref={analyticsRef} className="space-y-4">
+      {/* Analytics Section - Enhanced mobile responsiveness */}
+      <section ref={analyticsRef} className="space-y-3 sm:space-y-4">
         <div className="flex items-center justify-between">
-          <h2 className="text-xl font-semibold font-formula1 flex items-center gap-2">
-            <BarChart3 className="w-5 h-5" />
-            Performance Analytics
+          <h2 className="text-lg sm:text-xl font-semibold font-formula1 flex items-center gap-2 truncate">
+            <BarChart3 className="w-4 h-4 sm:w-5 sm:h-5 shrink-0" />
+            <span>Performance Analytics</span>
           </h2>
           <Button
             variant="ghost"
             size="sm"
             onClick={() => toggleSection('analytics')}
-            className="flex items-center gap-2"
+            className="flex items-center gap-1 sm:gap-2 text-xs sm:text-sm shrink-0"
           >
-            {expandedSections.analytics ? <ChevronUp className="w-4 h-4" /> : <ChevronDown className="w-4 h-4" />}
-            {expandedSections.analytics ? 'Collapse' : 'Expand'}
+            {expandedSections.analytics ? <ChevronUp className="w-3 h-3 sm:w-4 sm:h-4" /> : <ChevronDown className="w-3 h-3 sm:w-4 sm:h-4" />}
+            <span className="hidden sm:inline">{expandedSections.analytics ? 'Collapse' : 'Expand'}</span>
+            <span className="sm:hidden">{expandedSections.analytics ? '−' : '+'}</span>
           </Button>
         </div>
 
@@ -338,7 +340,7 @@ function DashboardContent({ weather, sessionKey, driverNumber, driverNumbers }: 
               className="overflow-hidden"
             >
               {analyticsInView && (
-                <div className="space-y-4">
+                <div className="space-y-3 sm:space-y-4">
                   <Suspense fallback={<ChartLoadingSkeleton title="Lap Time Comparison" />}>
                     <LapTimeComparisonChart
                       sessionKey={sessionKey}
@@ -358,21 +360,22 @@ function DashboardContent({ weather, sessionKey, driverNumber, driverNumbers }: 
         </AnimatePresence>
       </section>
 
-      {/* Advanced Section - Lazy Loaded */}
-      <section ref={advancedRef} className="space-y-4">
+      {/* Advanced Section - Enhanced mobile responsiveness */}
+      <section ref={advancedRef} className="space-y-3 sm:space-y-4">
         <div className="flex items-center justify-between">
-          <h2 className="text-xl font-semibold font-formula1 flex items-center gap-2">
-            <Settings className="w-5 h-5" />
-            Advanced Data
+          <h2 className="text-lg sm:text-xl font-semibold font-formula1 flex items-center gap-2 truncate">
+            <Settings className="w-4 h-4 sm:w-5 sm:h-5 shrink-0" />
+            <span>Advanced Data</span>
           </h2>
           <Button
             variant="ghost"
             size="sm"
             onClick={() => toggleSection('advanced')}
-            className="flex items-center gap-2"
+            className="flex items-center gap-1 sm:gap-2 text-xs sm:text-sm shrink-0"
           >
-            {expandedSections.advanced ? <ChevronUp className="w-4 h-4" /> : <ChevronDown className="w-4 h-4" />}
-            {expandedSections.advanced ? 'Collapse' : 'Expand'}
+            {expandedSections.advanced ? <ChevronUp className="w-3 h-3 sm:w-4 sm:h-4" /> : <ChevronDown className="w-3 h-3 sm:w-4 sm:h-4" />}
+            <span className="hidden sm:inline">{expandedSections.advanced ? 'Collapse' : 'Expand'}</span>
+            <span className="sm:hidden">{expandedSections.advanced ? '−' : '+'}</span>
           </Button>
         </div>
 
@@ -386,7 +389,7 @@ function DashboardContent({ weather, sessionKey, driverNumber, driverNumbers }: 
               className="overflow-hidden"
             >
               {advancedInView && (
-                <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+                <div className="space-y-3 sm:space-y-4 lg:grid lg:grid-cols-2 lg:gap-4 lg:space-y-0">
                   <Suspense fallback={<TableLoadingSkeleton />}>
                     <TelemetryTable
                       title="Real-time Data Stream"

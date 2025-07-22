@@ -8,6 +8,9 @@ import SessionComparison from "@/components/SessionComparison"
 import RaceProgressScrubBar from "@/components/RaceProgressScrubBar"
 import { useHistoricTelemetry } from "@/lib/hooks/useHistoricTelemetry"
 import { useHistoricPlayback } from "@/lib/hooks/useHistoricPlayback"
+import Header from "@/components/Header"
+import Sidebar from "@/components/Sidebar"
+import MobileNav from "@/components/MobileNav"
 
 export default function HistoricViewPage() {
   const [selectedSession, setSelectedSession] = useState<any>(null)
@@ -47,63 +50,111 @@ export default function HistoricViewPage() {
   const [scrubLap, setScrubLap] = useState(1)
 
   return (
-    <div>
-      <h1 className="text-2xl font-bold mb-4">Historic Telemetry View</h1>
-      <HistoricSessionSelector onSelect={setSelectedSession} />
-      <SessionComparison />
-      {selectedSession && (
-        <div className="mt-6 p-4 border rounded bg-muted">
-          <div className="font-semibold">Selected Session:</div>
-          <div>
-            {selectedSession.session_name} ({selectedSession.session_type})
-          </div>
-          <div>
-            {selectedSession.circuit_short_name || "Unknown Circuit"} |{" "}
-            {selectedSession.country_name || "Unknown Country"} |{" "}
-            {selectedSession.date_start?.slice(0, 10)}
-          </div>
-          <div className="mt-6 flex flex-col gap-4">
-            {/* Race progress scrub bar with event markers */}
-            <RaceProgressScrubBar
-              sessionKey={sessionKey}
-              value={scrubLap}
-              onChange={setScrubLap}
-            />
-            <PlaybackControls
-              playing={playing}
-              onPlayPause={toggle}
-              speed={speed}
-              setSpeed={setSpeed}
-              canStepBack={canStepBack}
-              canStepForward={canStepForward}
-              onStepBack={stepBack}
-              onStepForward={stepForward}
-            />
-            <TimelineScrubber
-              min={min}
-              max={max}
-              value={currentIdx}
-              onChange={handleScrub}
-              label="Telemetry Timeline"
-            />
-            {loading && (
-              <div className="text-xs text-muted-foreground mt-2">
-                Loading telemetry...
-              </div>
-            )}
-            {error && (
-              <div className="text-xs text-destructive mt-2">{error}</div>
-            )}
-            {current && (
-              <div className="mt-4 text-sm">
-                <pre className="bg-background p-2 rounded overflow-x-auto">
-                  {JSON.stringify(current, null, 2)}
-                </pre>
-              </div>
-            )}
-          </div>
+    <>
+      <Header />
+      <div className="flex flex-col md:flex-row min-h-screen">
+        <Sidebar />
+        <div className="block md:hidden">
+          <MobileNav />
         </div>
-      )}
-    </div>
+        <main className="flex-1 p-2 sm:p-4 md:p-6 w-full max-w-full overflow-x-hidden">
+          <div className="space-y-4 sm:space-y-6">
+            <div className="flex flex-col space-y-2 sm:space-y-0 sm:flex-row sm:items-center sm:justify-between">
+              <h1 className="text-xl sm:text-2xl font-bold font-formula1">
+                Historic Telemetry View
+              </h1>
+              <div className="text-xs sm:text-sm text-muted-foreground">
+                Browse and analyze historical F1 data
+              </div>
+            </div>
+
+            <div className="space-y-4">
+              <HistoricSessionSelector onSelect={setSelectedSession} />
+              <SessionComparison />
+            </div>
+
+            {selectedSession && (
+              <div className="space-y-4 p-3 sm:p-4 border rounded bg-muted/30">
+                <div className="space-y-2">
+                  <div className="font-semibold text-sm sm:text-base">
+                    Selected Session:
+                  </div>
+                  <div className="text-sm sm:text-base">
+                    {selectedSession.session_name} ({selectedSession.session_type})
+                  </div>
+                  <div className="text-xs sm:text-sm text-muted-foreground flex flex-col sm:flex-row sm:gap-2">
+                    <span>
+                      {selectedSession.circuit_short_name || "Unknown Circuit"}
+                    </span>
+                    <span className="hidden sm:inline">|</span>
+                    <span>
+                      {selectedSession.country_name || "Unknown Country"}
+                    </span>
+                    <span className="hidden sm:inline">|</span>
+                    <span>{selectedSession.date_start?.slice(0, 10)}</span>
+                  </div>
+                </div>
+
+                <div className="space-y-3 sm:space-y-4">
+                  {/* Mobile-friendly race progress scrub bar */}
+                  <div className="space-y-2">
+                    <h3 className="text-sm font-medium">Race Progress</h3>
+                    <RaceProgressScrubBar
+                      sessionKey={sessionKey}
+                      value={scrubLap}
+                      onChange={setScrubLap}
+                    />
+                  </div>
+
+                  {/* Mobile-optimized playback controls */}
+                  <div className="space-y-2">
+                    <h3 className="text-sm font-medium">Playback Controls</h3>
+                    <PlaybackControls
+                      playing={playing}
+                      onPlayPause={toggle}
+                      speed={speed}
+                      setSpeed={setSpeed}
+                      canStepBack={canStepBack}
+                      canStepForward={canStepForward}
+                      onStepBack={stepBack}
+                      onStepForward={stepForward}
+                    />
+                  </div>
+
+                  {/* Mobile-friendly timeline scrubber */}
+                  <div className="space-y-2">
+                    <h3 className="text-sm font-medium">Timeline</h3>
+                    <TimelineScrubber
+                      min={min}
+                      max={max}
+                      value={currentIdx}
+                      onChange={handleScrub}
+                      label="Telemetry Timeline"
+                    />
+                  </div>
+
+                  {loading && (
+                    <div className="text-xs text-muted-foreground">
+                      Loading telemetry...
+                    </div>
+                  )}
+                  {error && (
+                    <div className="text-xs text-destructive">{error}</div>
+                  )}
+                  {current && (
+                    <div className="space-y-2">
+                      <h3 className="text-sm font-medium">Current Telemetry Data</h3>
+                      <pre className="bg-background p-3 rounded text-xs overflow-x-auto max-h-64 overflow-y-auto border">
+                        {JSON.stringify(current, null, 2)}
+                      </pre>
+                    </div>
+                  )}
+                </div>
+              </div>
+            )}
+          </div>
+        </main>
+      </div>
+    </>
   )
 }

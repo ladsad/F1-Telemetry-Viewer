@@ -202,3 +202,71 @@ input,
 .gap-responsive-lg {
   gap: var(--spacing-lg);
 }
+
+/* Enhanced mobile responsiveness */
+@media (max-width: 640px) {
+  /* Ensure full width usage on mobile */
+  .container {
+    padding-left: var(--spacing-sm);
+    padding-right: var(--spacing-sm);
+  }
+  
+  /* Mobile-specific card adjustments */
+  .card-mobile {
+    border-radius: 8px;
+    margin-bottom: var(--spacing-sm);
+  }
+  
+  /* Mobile button optimizations */
+  button, .button {
+    min-height: 44px; /* iOS recommended touch target */
+  }
+  
+  /* Mobile text truncation */
+  .mobile-truncate {
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    max-width: 200px;
+  }
+  
+  /* Stack form elements vertically on mobile */
+  .form-mobile {
+    display: flex;
+    flex-direction: column;
+    gap: var(--spacing-sm);
+  }
+  
+  /* Smaller icons on mobile for better space usage */
+  .icon-mobile {
+    width: 16px;
+    height: 16px;
+  }
+}
+
+/* Landscape mobile specific adjustments */
+@media (max-width: 896px) and (orientation: landscape) {
+  /* Reduce header height on landscape mobile */
+  .header-mobile-landscape {
+    padding-top: var(--spacing-xs);
+    padding-bottom: var(--spacing-xs);
+  }
+  
+  /* Compact spacing for landscape */
+  .space-compact {
+    gap: var(--spacing-xs);
+  }
+}
+
+/* Mobile-first grid utilities */
+.mobile-grid-1 { grid-template-columns: 1fr; }
+.sm-grid-2 { 
+  @media (min-width: 640px) {
+    grid-template-columns: repeat(2, 1fr);
+  }
+}
+.lg-grid-3 { 
+  @media (min-width: 1024px) {
+    grid-template-columns: repeat(3, 1fr);
+  }
+}

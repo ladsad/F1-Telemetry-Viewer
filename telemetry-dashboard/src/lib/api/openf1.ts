@@ -55,7 +55,7 @@ export class OpenF1Service {
      * Create configuration from environment variables
      */
     private createConfigFromEnvironment(rateLimit: { max: number; intervalMs: number }): OpenF1Config {
-        const baseUrl = this.getEnvironmentVariable('NEXT_PUBLIC_OPENF1_API_URL', 'https://api.openf1.org/v1')
+        const baseUrl = this.getEnvironmentVariable('NEXT_PUBLIC_OPENF1_API_URL', 'https://api.openf1.org/v1')!
         const wsUrl = this.getEnvironmentVariable('NEXT_PUBLIC_OPENF1_WS_URL')
         const apiKey = this.getEnvironmentVariable('OPENF1_API_KEY')
         const clientId = this.getEnvironmentVariable('OPENF1_CLIENT_ID')
@@ -77,7 +77,7 @@ export class OpenF1Service {
             clientId,
             clientSecret,
             enableCache: this.getEnvironmentVariable('NEXT_PUBLIC_ENABLE_OPENF1_CACHE', 'true') === 'true',
-            defaultCacheTtl: parseInt(this.getEnvironmentVariable('NEXT_PUBLIC_OPENF1_CACHE_TTL', '10000'), 10),
+            defaultCacheTtl: parseInt(this.getEnvironmentVariable('NEXT_PUBLIC_OPENF1_CACHE_TTL', '10000') ?? '10000', 10),
             rateLimit: finalRateLimit
         }
     }
@@ -781,7 +781,18 @@ export class OpenF1Service {
 
 // Utility function to create a default OpenF1Service instance
 export function createOpenF1Service(config?: Partial<OpenF1Config>): OpenF1Service {
-    return new OpenF1Service(config)
+    // Ensure baseUrl is set, fallback to default if missing
+    const fullConfig: OpenF1Config = {
+        baseUrl: config?.baseUrl ?? (typeof process !== 'undefined' && process.env?.NEXT_PUBLIC_OPENF1_API_URL ? process.env.NEXT_PUBLIC_OPENF1_API_URL : 'https://api.openf1.org/v1'),
+        wsUrl: config?.wsUrl,
+        apiKey: config?.apiKey,
+        clientId: config?.clientId,
+        clientSecret: config?.clientSecret,
+        enableCache: config?.enableCache ?? true,
+        defaultCacheTtl: config?.defaultCacheTtl ?? 10000,
+        rateLimit: config?.rateLimit ?? { max: 10, intervalMs: 1000 }
+    }
+    return new OpenF1Service(fullConfig)
 }
 
 // Utility to poll for weather and detect alerts (for use in WeatherAlert)

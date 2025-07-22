@@ -12,6 +12,7 @@ import ConnectionStatusIndicator from "@/components/ConnectionStatusIndicator";
 import { TelemetryTableProps, TelemetryData } from "@/types";
 import { motion, AnimatePresence } from "framer-motion";
 import { useTelemetryVirtualization } from "@/lib/hooks/useTelemetryVirtualization";
+import type { ListChildComponentProps, VariableSizeList as VariableSizeListType, FixedSizeList as FixedSizeListType } from "react-window";
 
 // Enhanced column configuration with flexible widths
 interface ColumnConfig {
@@ -50,19 +51,18 @@ interface FilterOptions {
 }
 
 // Memoized row renderer for performance
-const VirtualizedRow = ({ 
+const VirtualizedRow = useCallback(({ 
   index, 
   style, 
   data 
-}: ListChildComponentProps & { 
-  data: { 
+}: ListChildComponentProps) => {
+  const { items, columns, onRowClick, selectedRows } = data as { 
     items: TelemetryData[], 
     columns: ColumnConfig[], 
     onRowClick?: (item: TelemetryData, index: number) => void,
     selectedRows?: Set<number>
-  } 
-}) => {
-  const { items, columns, onRowClick, selectedRows } = data;
+  };
+  
   const item = items[index];
   const isSelected = selectedRows?.has(index);
   const isEven = index % 2 === 0;
@@ -84,7 +84,7 @@ const VirtualizedRow = ({
       animate={{ opacity: 1, x: 0 }}
       transition={{ duration: 0.2, delay: index * 0.01 }}
     >
-      {columns.map((column) => {
+      {columns.map((column: ColumnConfig) => {
         const value = item[column.key];
         const formattedValue = column.formatter ? column.formatter(value) : String(value || 'N/A');
         
@@ -109,7 +109,7 @@ const VirtualizedRow = ({
       })}
     </motion.div>
   );
-};
+}, []);
 
 // Header component with sorting
 const TableHeader = ({ 
@@ -216,8 +216,8 @@ export default function TelemetryTable({
     drsOnly: false
   });
   
-  // Refs for virtualization
-  const listRef = useRef<List | FixedList>(null);
+  // Refs for virtualization - use a more flexible type
+  const listRef = useRef<any>(null);
   const headerRef = useRef<HTMLDivElement>(null);
 
   // Column configuration with enhanced formatting
@@ -309,8 +309,13 @@ export default function TelemetryTable({
     if (Array.isArray(rawData)) {
       return rawData;
     }
-    if (rawData && typeof rawData === 'object' && 'data' in rawData && Array.isArray(rawData.data)) {
-      return rawData.data;
+    if (
+      rawData &&
+      typeof rawData === 'object' &&
+      'data' in rawData &&
+      Array.isArray((rawData as { data?: unknown }).data)
+    ) {
+      return (rawData as { data: TelemetryData[] }).data;
     }
     return [];
   }, [rawData]);
@@ -441,7 +446,14 @@ export default function TelemetryTable({
 
   // Scroll to specific row
   const scrollToRow = useCallback((index: number) => {
-    listRef.current?.scrollToItem(index, 'center');
+    if (listRef.current) {
+      if ('scrollToItem' in listRef.current) {
+        listRef.current.scrollToItem(index, 'center');
+      } else {
+        // Fallback for lists that don't support scrollToItem
+        console.warn('scrollToItem not supported by this list type');
+      }
+    }
   }, []);
 
   // Item data for virtualization
@@ -604,22 +616,34 @@ export default function TelemetryTable({
             <div className="flex-1 overflow-hidden">
               <AutoSizer>
                 {({ height, width }) => {
-                  const ListComponent = virtualScrollOptions?.useVariableSize ? List : FixedList;
+                  const ListComponent = virtualScrollOptions?.useVariableSize ? VariableSizeList : FixedSizeList;
                   
-                  return (
-                    <ListComponent
-                      ref={listRef}
-                      height={height}
-                      width={width}
-                      itemCount={processedData.length}
-                      itemSize={virtualScrollOptions?.useVariableSize ? getItemSize : virtualScrollOptions?.itemSize || 40}
-                      itemData={itemData}
-                      overscanCount={virtualScrollOptions?.overscanCount || 10}
-                      className="virtualized-table-list"
-                    >
-                      {VirtualizedRow}
-                    </ListComponent>
-                  );
+                  const listProps = {
+                    ref: listRef,
+                    height,
+                    width,
+                    itemCount: processedData.length,
+                    itemData: itemData,
+                    overscanCount: virtualScrollOptions?.overscanCount || 10,
+                    className: "virtualized-table-list",
+                    children: VirtualizedRow
+                  };
+
+                  if (virtualScrollOptions?.useVariableSize) {
+                    return (
+                      <VariableSizeList
+                        {...listProps}
+                        itemSize={getItemSize}
+                      />
+                    );
+                  } else {
+                    return (
+                      <FixedSizeList
+                        {...listProps}
+                        itemSize={virtualScrollOptions?.itemSize || 40}
+                      />
+                    );
+                  }
                 }}
               </AutoSizer>
             </div>

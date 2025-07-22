@@ -1,211 +1,545 @@
 "use client"
 
-import { useState, useEffect, Suspense, useCallback, useMemo, useRef } from "react"
-import dynamic from "next/dynamic"
-import { useInView } from "react-intersection-observer"
-import Sidebar from "@/components/layout/Sidebar"
-import Header from "@/components/layout/Header"
-import MobileNav from "@/components/layout/MobileNav"
-import { OpenF1Service } from "@/lib/api/openf1"
-import { TelemetryProvider, useTelemetry } from "@/context/TelemetryDataContext"
-import LoadingSpinner from "@/components/ui/LoadingSpinner"
+import { useState, useEffect, useCallback, useMemo, useRef } from "react"
+import { motion, AnimatePresence } from "framer-motion"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
+import { Separator } from "@/components/ui/separator"
 import AnimatedButton from "@/components/AnimatedButton"
+import { useTheme } from "@/components/ThemeProvider"
+import { OpenF1Service } from "@/lib/api/openf1"
+import { useOpenF1Telemetry } from "@/lib/hooks/useWebSocket"
+import ConnectionStatusIndicator, { TelemetryConnectionIndicator } from "@/components/ConnectionStatusIndicator"
+import AnimatedGauge, { SpeedGauge, RPMGauge, ThrottleGauge, BrakeGauge } from "@/components/ui/AnimatedGauge"
+import LoadingSpinner from "@/components/ui/LoadingSpinner"
+import Header from "@/components/layout/Header"
+import Sidebar from "@/components/layout/Sidebar"
+import MobileNav from "@/components/layout/MobileNav"
+import { TelemetryProvider, useTelemetry } from "@/context/TelemetryDataContext"
 import { 
-  RefreshCw, 
-  Zap, 
   Activity, 
   Radio, 
-  AlertCircle, 
+  Users, 
+  Clock, 
+  Thermometer, 
+  Wind, 
+  Droplets,
+  Zap,
+  Settings,
+  Pause,
+  Play,
+  RefreshCw,
+  AlertTriangle,
+  CheckCircle,
+  WifiOff,
   Eye,
   EyeOff,
-  Users,
-  TrendingUp,
-  Clock,
-  MapPin,
-  Gauge,
-  ChevronUp,
-  ChevronDown,
-  BarChart3,
-  Signal,
-  Play,
-  Pause,
-  Square
+  Maximize,
+  Minimize,
+  Volume2,
+  VolumeX,
+  Filter,
+  Download,
+  Share2,
+  BarChart3
 } from "lucide-react"
-import { motion, AnimatePresence } from "framer-motion"
+import type { 
+  OpenF1CarData, 
+  OpenF1WeatherData, 
+  OpenF1DriverInfo,
+  OpenF1DriverPosition,
+  OpenF1DriverStatus 
+} from "@/lib/api/types"
 
-// Enhanced dynamic imports with real-time optimizations
-const TelemetryDisplay = dynamic(() => import("@/components/TelemetryDisplay"), {
-  loading: () => <LiveTelemetryDisplaySkeleton />,
-  ssr: false
-})
+// Real-time driver data interface
+interface LiveDriverData extends OpenF1CarData {
+  position?: number
+  gap_to_leader?: number
+  tire_compound?: string
+  tire_age?: number
+  pit_status?: string
+  driver_name?: string
+  team_name?: string
+  team_color?: string
+}
 
-const TrackMap = dynamic(() => import("@/components/TrackMap"), {
-  loading: () => <LiveTrackMapSkeleton />,
-  ssr: false
-})
+// Live session state
+interface LiveSessionState {
+  sessionKey: string
+  isLive: boolean
+  currentLap: number
+  totalLaps: number
+  sessionTime: number
+  sessionType: string
+  trackName: string
+  weather: OpenF1WeatherData | null
+  drivers: LiveDriverData[]
+  selectedDrivers: number[]
+  lastUpdate: Date
+}
 
-const DriverPanel = dynamic(() => import("@/components/DriverPanel"), {
-  loading: () => <LiveDriverPanelSkeleton />,
-  ssr: false
-})
+// Live data hooks
+function useLiveSessionData(sessionKey: string) {
+  const [sessionState, setSessionState] = useState<LiveSessionState>({
+    sessionKey,
+    isLive: false,
+    currentLap: 1,
+    totalLaps: 0,
+    sessionTime: 0,
+    sessionType: 'Practice',
+    trackName: 'Unknown Circuit',
+    weather: null,
+    drivers: [],
+    selectedDrivers: [],
+    lastUpdate: new Date()
+  })
 
-const WeatherOverlay = dynamic(() => import("@/components/WeatherOverlay"), {
-  loading: () => <LiveWeatherSkeleton />,
-  ssr: false
-})
+  const [isLoading, setIsLoading] = useState(true)
+  const [error, setError] = useState<string | null>(null)
+  const intervalRef = useRef<NodeJS.Timeout>()
 
-// Live-specific components
-const TelemetryTable = dynamic(() => import("@/components/TelemetryTable"), {
-  loading: () => <LiveTableSkeleton />,
-  ssr: false
-})
+  // WebSocket connection for real-time telemetry
+  const { 
+    data: telemetryData, 
+    connectionState, 
+    reconnect,
+    disconnect 
+  } = useOpenF1Telemetry(sessionKey)
 
-const LapTimeComparisonChart = dynamic(() => import("@/components/LapTimeComparisonChart"), {
-  loading: () => <LiveChartSkeleton title="Live Lap Comparison" />,
-  ssr: false
-})
+  // Fetch session details and initialize
+  const initializeSession = useCallback(async () => {
+    try {
+      setIsLoading(true)
+      setError(null)
+      
+      const openf1 = new OpenF1Service(); // No longer needs explicit URL parameter
+      
+      // Fetch session details
+      const [session, weather, drivers] = await Promise.all([
+        openf1.getSessionDetails(sessionKey),
+        openf1.getWeather(sessionKey),
+        openf1.getDriverInfo(sessionKey)
+      ])
 
-// Live position tracking component
-const LivePositionTracker = dynamic(() => import("@/components/LivePositionTracker").catch(() => ({
-  default: () => <LivePositionTrackerSkeleton />
-})), {
-  loading: () => <LivePositionTrackerSkeleton />,
-  ssr: false
-})
+      // Get initial driver data
+      const initialDriverData = await Promise.all(
+        drivers.map(async (driver: OpenF1DriverInfo) => {
+          try {
+            const carData = await openf1.getCarTelemetry(sessionKey, undefined, driver.driver_number)
+            const positions = await openf1.getDriverPositions(sessionKey)
+            const position = positions.find((p: any) => p.driver_number === driver.driver_number)
+            
+            const latestData = Array.isArray(carData) && carData.length > 0 
+              ? carData[carData.length - 1] 
+              : null
 
-// Real-time statistics dashboard
-const LiveStatsOverview = dynamic(() => import("@/components/LiveStatsOverview").catch(() => ({
-  default: () => <LiveStatsOverviewSkeleton />
-})), {
-  loading: () => <LiveStatsOverviewSkeleton />,
-  ssr: false
-})
+            return {
+              ...latestData,
+              driver_number: driver.driver_number,
+              driver_name: driver.broadcast_name || driver.full_name,
+              team_name: driver.team_name,
+              team_color: driver.color,
+              position: position?.position || 0,
+              speed: latestData?.speed || 0,
+              throttle: latestData?.throttle || 0,
+              brake: latestData?.brake || 0,
+              gear: latestData?.gear || 0,
+              rpm: latestData?.rpm || 0,
+              drs: latestData?.drs || false,
+              timestamp: latestData?.timestamp || Date.now()
+            } as LiveDriverData
+          } catch {
+            return {
+              driver_number: driver.driver_number,
+              driver_name: driver.broadcast_name || driver.full_name,
+              team_name: driver.team_name,
+              team_color: driver.color,
+              position: 0,
+              speed: 0,
+              throttle: 0,
+              brake: 0,
+              gear: 0,
+              rpm: 0,
+              drs: false,
+              timestamp: Date.now()
+            } as LiveDriverData
+          }
+        })
+      )
 
-// Enhanced Loading Skeletons with Real-time Indicators
-function LiveTelemetryDisplaySkeleton() {
+      setSessionState({
+        sessionKey,
+        isLive: session?.session_type?.includes('Race') || false,
+        currentLap: 1,
+        totalLaps: session?.session_type?.includes('Race') ? 50 : 0,
+        sessionTime: 0,
+        sessionType: session?.session_type || 'Practice',
+        trackName: session?.circuit_short_name || session?.circuit_name || 'Unknown Circuit',
+        weather: Array.isArray(weather) && weather.length > 0 ? weather[weather.length - 1] : null,
+        drivers: initialDriverData.sort((a, b) => (a.position || 999) - (b.position || 999)),
+        selectedDrivers: initialDriverData.slice(0, 6).map(d => d.driver_number),
+        lastUpdate: new Date()
+      })
+
+    } catch (err) {
+      console.error('Failed to initialize live session:', err)
+      setError(err instanceof Error ? err.message : 'Failed to load session data')
+    } finally {
+      setIsLoading(false)
+    }
+  }, [sessionKey])
+
+  // Update live data periodically
+  const updateLiveData = useCallback(async () => {
+    if (!sessionState.isLive) return
+
+    try {
+      const openf1 = new OpenF1Service(); // No longer needs explicit URL parameter
+      
+      // Update weather and positions
+      const [weather, positions] = await Promise.all([
+        openf1.getWeather(sessionKey),
+        openf1.getDriverPositions(sessionKey)
+      ])
+
+      // Update driver data with latest telemetry from WebSocket
+      if (telemetryData) {
+        setSessionState(prev => {
+          const updatedDrivers = prev.drivers.map(driver => {
+            const wsData = Array.isArray(telemetryData) 
+              ? telemetryData.find((d: any) => d.driver_number === driver.driver_number)
+              : telemetryData.driver_number === driver.driver_number ? telemetryData : null
+
+            const position = positions.find((p: any) => p.driver_number === driver.driver_number)
+
+            if (wsData) {
+              return {
+                ...driver,
+                ...wsData,
+                position: position?.position || driver.position,
+                timestamp: Date.now()
+              }
+            }
+
+            return {
+              ...driver,
+              position: position?.position || driver.position
+            }
+          })
+
+          return {
+            ...prev,
+            weather: Array.isArray(weather) && weather.length > 0 ? weather[weather.length - 1] : prev.weather,
+            drivers: updatedDrivers.sort((a, b) => (a.position || 999) - (b.position || 999)),
+            lastUpdate: new Date()
+          }
+        })
+      }
+
+    } catch (err) {
+      console.warn('Failed to update live data:', err)
+    }
+  }, [sessionKey, sessionState.isLive, telemetryData])
+
+  // Setup periodic updates
+  useEffect(() => {
+    if (sessionState.isLive && connectionState === 'open') {
+      intervalRef.current = setInterval(updateLiveData, 2000) // Update every 2 seconds
+    } else {
+      if (intervalRef.current) {
+        clearInterval(intervalRef.current)
+      }
+    }
+
+    return () => {
+      if (intervalRef.current) {
+        clearInterval(intervalRef.current)
+      }
+    }
+  }, [sessionState.isLive, connectionState, updateLiveData])
+
+  // Initialize on mount
+  useEffect(() => {
+    initializeSession()
+  }, [initializeSession])
+
+  return {
+    sessionState,
+    setSessionState,
+    isLoading,
+    error,
+    connectionState,
+    reconnect,
+    disconnect,
+    refresh: initializeSession
+  }
+}
+
+// Live telemetry display component
+function LiveTelemetryDisplay({ drivers, selectedDrivers, onDriverSelect }: {
+  drivers: LiveDriverData[]
+  selectedDrivers: number[]
+  onDriverSelect: (driverNumber: number) => void
+}) {
+  const { colors } = useTheme()
+  
+  const selectedDriver = drivers.find(d => d.driver_number === selectedDrivers[0])
+  const [comparisonMode, setComparisonMode] = useState(false)
+
+  if (!selectedDriver) {
+    return (
+      <Card>
+        <CardContent className="p-8 text-center">
+          <Activity className="w-12 h-12 mx-auto mb-4 text-muted-foreground" />
+          <h3 className="text-lg font-semibold mb-2">No Driver Selected</h3>
+          <p className="text-muted-foreground">Select a driver to view live telemetry data</p>
+        </CardContent>
+      </Card>
+    )
+  }
+
   return (
-    <Card className="relative overflow-hidden">
-      <div className="absolute top-2 right-2 z-10">
-        <Badge variant="outline" className="animate-pulse">
-          <Radio className="w-3 h-3 mr-1 animate-ping" />
-          Connecting...
-        </Badge>
-      </div>
-      <CardContent className="p-6">
-        <div className="space-y-4">
+    <div className="space-y-6">
+      {/* Driver Selection Header */}
+      <Card>
+        <CardHeader>
           <div className="flex items-center justify-between">
-            <div className="flex items-center space-x-2">
-              <div className="w-6 h-6 rounded-full bg-primary/20 animate-pulse" />
-              <div className="h-6 w-32 bg-muted rounded animate-pulse" />
+            <div className="flex items-center gap-4">
+              <div 
+                className="w-4 h-4 rounded-full"
+                style={{ backgroundColor: selectedDriver.team_color || colors.primary }}
+              />
+              <div>
+                <CardTitle className="font-formula1">
+                  {selectedDriver.driver_name} #{selectedDriver.driver_number}
+                </CardTitle>
+                <p className="text-sm text-muted-foreground">{selectedDriver.team_name}</p>
+              </div>
             </div>
-            <div className="w-16 h-8 bg-muted rounded animate-pulse" />
-          </div>
-          <div className="grid grid-cols-2 md:grid-cols-3 gap-4">
-            {Array.from({ length: 6 }).map((_, i) => (
-              <motion.div 
-                key={i} 
-                className="space-y-2"
-                initial={{ opacity: 0, y: 20 }}
-                animate={{ opacity: 1, y: 0 }}
-                transition={{ delay: i * 0.1 }}
+            
+            <div className="flex items-center gap-2">
+              <Badge 
+                variant={selectedDriver.position === 1 ? "default" : "secondary"}
+                className="font-mono"
               >
-                <div className="w-8 h-8 bg-gradient-to-r from-primary/20 to-primary/40 rounded-full animate-pulse mx-auto" />
-                <div className="h-8 w-16 bg-muted rounded animate-pulse mx-auto" />
-                <div className="h-4 w-12 bg-muted/60 rounded animate-pulse mx-auto" />
-              </motion.div>
+                P{selectedDriver.position || 'N/A'}
+              </Badge>
+              <TelemetryConnectionIndicator size="sm" />
+            </div>
+          </div>
+        </CardHeader>
+        
+        <CardContent>
+          {/* Quick Stats */}
+          <div className="grid grid-cols-4 gap-4 mb-6">
+            <div className="text-center">
+              <div className="text-2xl font-bold font-mono" style={{ color: colors.primary }}>
+                {Math.round(selectedDriver.speed || 0)}
+              </div>
+              <div className="text-xs text-muted-foreground">km/h</div>
+            </div>
+            <div className="text-center">
+              <div className="text-2xl font-bold font-mono">
+                {selectedDriver.gear || 'N'}
+              </div>
+              <div className="text-xs text-muted-foreground">Gear</div>
+            </div>
+            <div className="text-center">
+              <div className="text-2xl font-bold font-mono">
+                {Math.round(selectedDriver.rpm || 0)}
+              </div>
+              <div className="text-xs text-muted-foreground">RPM</div>
+            </div>
+            <div className="text-center">
+              <div className={`text-2xl font-bold font-mono ${selectedDriver.drs ? 'text-green-500' : 'text-gray-400'}`}>
+                {selectedDriver.drs ? 'ON' : 'OFF'}
+              </div>
+              <div className="text-xs text-muted-foreground">DRS</div>
+            </div>
+          </div>
+
+          {/* Gauges Grid */}
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
+            <SpeedGauge 
+              value={selectedDriver.speed || 0}
+              size="md"
+              showLabels={true}
+            />
+            
+            <RPMGauge 
+              value={selectedDriver.rpm || 0}
+              size="md"
+              showLabels={true}
+            />
+            
+            <ThrottleGauge 
+              value={selectedDriver.throttle || 0}
+              size="md"
+              showLabels={true}
+            />
+            
+            <BrakeGauge 
+              value={selectedDriver.brake || 0}
+              size="md"
+              showLabels={true}
+            />
+          </div>
+        </CardContent>
+      </Card>
+
+      {/* Driver Selection Grid */}
+      <Card>
+        <CardHeader>
+          <CardTitle className="flex items-center gap-2">
+            <Users className="w-5 h-5" />
+            Driver Selection
+          </CardTitle>
+        </CardHeader>
+        <CardContent>
+          <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-3">
+            {drivers.slice(0, 20).map((driver) => (
+              <motion.button
+                key={driver.driver_number}
+                className={`p-3 rounded-lg border transition-all ${
+                  selectedDrivers.includes(driver.driver_number)
+                    ? 'border-primary bg-primary/10'
+                    : 'border-border hover:border-primary/50'
+                }`}
+                onClick={() => onDriverSelect(driver.driver_number)}
+                whileHover={{ scale: 1.02 }}
+                whileTap={{ scale: 0.98 }}
+              >
+                <div className="flex items-center gap-2 mb-2">
+                  <div 
+                    className="w-3 h-3 rounded-full"
+                    style={{ backgroundColor: driver.team_color || colors.primary }}
+                  />
+                  <span className="font-formula1 text-sm">#{driver.driver_number}</span>
+                  {driver.position && (
+                    <Badge variant="outline" className="text-xs ml-auto">
+                      P{driver.position}
+                    </Badge>
+                  )}
+                </div>
+                <div className="text-xs text-left">
+                  <div className="font-medium truncate">{driver.driver_name}</div>
+                  <div className="text-muted-foreground">{Math.round(driver.speed || 0)} km/h</div>
+                </div>
+              </motion.button>
             ))}
           </div>
-          <div className="mt-4 flex items-center justify-center space-x-2 text-sm text-muted-foreground">
-            <div className="flex space-x-1">
-              {[0, 1, 2].map((i) => (
-                <motion.div
-                  key={i}
-                  className="w-2 h-2 bg-primary rounded-full"
-                  animate={{
-                    scale: [1, 1.5, 1],
-                    opacity: [0.5, 1, 0.5]
-                  }}
-                  transition={{
-                    duration: 1.5,
-                    repeat: Infinity,
-                    delay: i * 0.2
-                  }}
-                />
-              ))}
-            </div>
-            <span>Awaiting live telemetry stream...</span>
-          </div>
-        </div>
-      </CardContent>
-    </Card>
+        </CardContent>
+      </Card>
+    </div>
   )
 }
 
-function LiveTrackMapSkeleton() {
+// Live driver positions component
+function LiveDriverPositions({ drivers }: { drivers: LiveDriverData[] }) {
+  const { colors } = useTheme()
+  const [sortBy, setSortBy] = useState<'position' | 'speed' | 'team'>('position')
+
+  const sortedDrivers = useMemo(() => {
+    return [...drivers].sort((a, b) => {
+      switch (sortBy) {
+        case 'position':
+          return (a.position || 999) - (b.position || 999)
+        case 'speed':
+          return (b.speed || 0) - (a.speed || 0)
+        case 'team':
+          return (a.team_name || '').localeCompare(b.team_name || '')
+        default:
+          return 0
+      }
+    })
+  }, [drivers, sortBy])
+
   return (
     <Card>
       <CardHeader>
         <div className="flex items-center justify-between">
-          <div className="flex items-center space-x-2">
-            <Activity className="w-6 h-6 text-muted-foreground animate-pulse" />
-            <div className="h-6 w-24 bg-muted rounded animate-pulse" />
+          <CardTitle className="flex items-center gap-2">
+            <BarChart3 className="w-5 h-5" />
+            Live Positions
+          </CardTitle>
+          
+          <div className="flex items-center gap-2">
+            <Button
+              variant="ghost"
+              size="sm"
+              onClick={() => setSortBy('position')}
+              className={sortBy === 'position' ? 'bg-primary/20' : ''}
+            >
+              Position
+            </Button>
+            <Button
+              variant="ghost"
+              size="sm"
+              onClick={() => setSortBy('speed')}
+              className={sortBy === 'speed' ? 'bg-primary/20' : ''}
+            >
+              Speed
+            </Button>
+            <Button
+              variant="ghost"
+              size="sm"
+              onClick={() => setSortBy('team')}
+              className={sortBy === 'team' ? 'bg-primary/20' : ''}
+            >
+              Team
+            </Button>
           </div>
-          <Badge variant="outline" className="animate-pulse">
-            <Radio className="w-3 h-3 mr-1" />
-            Live Track
-          </Badge>
         </div>
       </CardHeader>
+      
       <CardContent>
-        <div className="aspect-video bg-gradient-to-br from-muted/30 via-muted/50 to-muted/30 rounded-lg animate-pulse flex items-center justify-center relative overflow-hidden">
-          <motion.div
-            className="absolute inset-4 border-2 border-dashed border-primary/20 rounded-full"
-            animate={{ rotate: 360 }}
-            transition={{ duration: 8, repeat: Infinity, ease: "linear" }}
-          />
-          <div className="text-center space-y-2 z-10">
+        <div className="space-y-2 max-h-96 overflow-y-auto">
+          {sortedDrivers.map((driver, index) => (
             <motion.div
-              className="w-12 h-12 border-4 border-primary/30 border-t-primary rounded-full mx-auto"
-              animate={{ rotate: 360 }}
-              transition={{ duration: 1, repeat: Infinity, ease: "linear" }}
-            />
-            <p className="text-sm text-muted-foreground font-medium">Loading live track positions...</p>
-          </div>
-        </div>
-      </CardContent>
-    </Card>
-  )
-}
-
-function LiveDriverPanelSkeleton() {
-  return (
-    <Card>
-      <CardHeader>
-        <div className="flex items-center justify-between">
-          <div className="flex items-center space-x-2">
-            <div className="w-6 h-6 bg-muted rounded-full animate-pulse" />
-            <div className="h-6 w-32 bg-muted rounded animate-pulse" />
-          </div>
-          <Badge variant="outline" className="animate-pulse">Live</Badge>
-        </div>
-      </CardHeader>
-      <CardContent>
-        <div className="space-y-3">
-          {Array.from({ length: 4 }).map((_, i) => (
-            <motion.div 
-              key={i} 
-              className="flex items-center space-x-3"
+              key={driver.driver_number}
+              className="flex items-center gap-4 p-3 rounded-lg bg-muted/30"
               initial={{ opacity: 0, x: -20 }}
               animate={{ opacity: 1, x: 0 }}
-              transition={{ delay: i * 0.2 }}
+              transition={{ delay: index * 0.05 }}
             >
-              <div className="w-6 h-6 bg-gradient-to-r from-primary/20 to-primary/40 rounded-full animate-pulse" />
-              <div className="flex-1 space-y-1">
-                <div className="h-4 w-3/4 bg-muted rounded animate-pulse" />
-                <div className="h-3 w-1/2 bg-muted/60 rounded animate-pulse" />
+              <div className="flex items-center gap-3 flex-1">
+                <div className="text-center min-w-[2rem]">
+                  <div className="text-lg font-bold font-mono">
+                    {driver.position || 'N/A'}
+                  </div>
+                </div>
+                
+                <div 
+                  className="w-1 h-8 rounded-full"
+                  style={{ backgroundColor: driver.team_color || colors.primary }}
+                />
+                
+                <div className="flex-1 min-w-0">
+                  <div className="font-formula1 text-sm">
+                    #{driver.driver_number} {driver.driver_name}
+                  </div>
+                  <div className="text-xs text-muted-foreground truncate">
+                    {driver.team_name}
+                  </div>
+                </div>
+              </div>
+              
+              <div className="text-right">
+                <div className="font-mono font-bold">
+                  {Math.round(driver.speed || 0)} km/h
+                </div>
+                <div className="text-xs text-muted-foreground">
+                  Gear {driver.gear || 'N'}
+                </div>
+              </div>
+              
+              <div className="flex items-center gap-1">
+                {driver.drs && (
+                  <Badge variant="secondary" className="text-xs bg-green-500/20 text-green-600">
+                    DRS
+                  </Badge>
+                )}
               </div>
             </motion.div>
           ))}
@@ -215,410 +549,305 @@ function LiveDriverPanelSkeleton() {
   )
 }
 
-function LiveWeatherSkeleton() {
-  return (
-    <Card>
-      <CardHeader>
-        <div className="flex items-center justify-between">
-          <div className="flex items-center space-x-2">
-            <div className="w-6 h-6 bg-muted rounded animate-pulse" />
-            <div className="h-6 w-28 bg-muted rounded animate-pulse" />
-          </div>
-          <Badge variant="outline" className="animate-pulse">
-            <Radio className="w-3 h-3 mr-1" />
-            Live
-          </Badge>
-        </div>
-      </CardHeader>
-      <CardContent>
-        <div className="grid grid-cols-2 gap-4">
-          {Array.from({ length: 4 }).map((_, i) => (
-            <motion.div 
-              key={i} 
-              className="space-y-2"
-              initial={{ opacity: 0, scale: 0.8 }}
-              animate={{ opacity: 1, scale: 1 }}
-              transition={{ delay: i * 0.1 }}
-            >
-              <div className="h-4 w-20 bg-muted rounded animate-pulse" />
-              <div className="h-6 w-16 bg-gradient-to-r from-muted to-muted/50 rounded animate-pulse" />
-            </motion.div>
-          ))}
-        </div>
-        <div className="mt-4 space-y-2">
-          <div className="h-4 w-24 bg-muted rounded animate-pulse" />
-          <div className="h-2 w-full bg-muted rounded animate-pulse" />
-        </div>
-      </CardContent>
-    </Card>
-  )
-}
+// Live weather widget
+function LiveWeatherWidget({ weather }: { weather: OpenF1WeatherData | null }) {
+  const { colors } = useTheme()
 
-function LiveTableSkeleton() {
-  return (
-    <Card>
-      <CardHeader>
-        <div className="flex items-center justify-between">
+  if (!weather) {
+    return (
+      <Card>
+        <CardHeader>
           <CardTitle className="flex items-center gap-2">
-            <Zap className="w-5 h-5 animate-pulse" />
-            <span>Live Data Stream</span>
+            <Thermometer className="w-5 h-5" />
+            Weather
           </CardTitle>
-          <Badge variant="outline" className="animate-pulse">Streaming...</Badge>
-        </div>
-      </CardHeader>
-      <CardContent>
-        <div className="space-y-2">
-          <div className="grid grid-cols-6 gap-4 pb-2 border-b">
-            {Array.from({ length: 6 }).map((_, i) => (
-              <div key={i} className="h-4 bg-muted rounded animate-pulse" />
-            ))}
+        </CardHeader>
+        <CardContent>
+          <div className="text-center py-8">
+            <Thermometer className="w-8 h-8 mx-auto mb-2 text-muted-foreground" />
+            <p className="text-sm text-muted-foreground">Weather data unavailable</p>
           </div>
-          {Array.from({ length: 8 }).map((_, i) => (
-            <motion.div 
-              key={i} 
-              className="grid grid-cols-6 gap-4 py-2"
-              initial={{ opacity: 0, y: 10 }}
-              animate={{ opacity: 1, y: 0 }}
-              transition={{ delay: i * 0.05 }}
-            >
-              {Array.from({ length: 6 }).map((_, j) => (
-                <div key={j} className="h-4 bg-muted/50 rounded animate-pulse" />
-              ))}
-            </motion.div>
-          ))}
-        </div>
-      </CardContent>
-    </Card>
-  )
-}
+        </CardContent>
+      </Card>
+    )
+  }
 
-function LiveChartSkeleton({ title }: { title: string }) {
-  return (
-    <Card>
-      <CardHeader>
-        <div className="flex items-center justify-between">
-          <CardTitle className="flex items-center gap-2">
-            <Activity className="w-5 h-5 animate-pulse" />
-            <span>{title}</span>
-          </CardTitle>
-          <Badge variant="outline" className="animate-pulse">
-            <Radio className="w-3 h-3 mr-1 animate-ping" />
-            Live Updates
-          </Badge>
-        </div>
-      </CardHeader>
-      <CardContent>
-        <div className="h-64 bg-gradient-to-r from-muted/30 via-muted/50 to-muted/30 rounded-lg animate-pulse flex items-center justify-center relative overflow-hidden">
-          <div className="absolute inset-0">
-            {[0, 1, 2].map((i) => (
-              <motion.div
-                key={i}
-                className="absolute h-0.5 bg-primary/20"
-                style={{
-                  top: `${30 + i * 20}%`,
-                  left: 0,
-                  right: 0
-                }}
-                animate={{
-                  scaleX: [0, 1, 0.5, 1],
-                  opacity: [0.3, 1, 0.6, 1]
-                }}
-                transition={{
-                  duration: 2,
-                  repeat: Infinity,
-                  delay: i * 0.5
-                }}
-              />
-            ))}
-          </div>
-          <div className="text-center space-y-2 z-10">
-            <motion.div
-              className="w-8 h-8 border-2 border-primary/30 border-t-primary rounded-full mx-auto"
-              animate={{ rotate: 360 }}
-              transition={{ duration: 1, repeat: Infinity, ease: "linear" }}
-            />
-            <p className="text-sm text-muted-foreground">Loading {title.toLowerCase()}...</p>
-          </div>
-        </div>
-      </CardContent>
-    </Card>
-  )
-}
-
-// New skeleton components for live features
-function LivePositionTrackerSkeleton() {
   return (
     <Card>
       <CardHeader>
         <CardTitle className="flex items-center gap-2">
-          <MapPin className="w-5 h-5 animate-pulse" />
-          <span>Live Positions</span>
+          <Thermometer className="w-5 h-5" />
+          Live Weather
         </CardTitle>
       </CardHeader>
       <CardContent>
-        <div className="space-y-3">
-          {Array.from({ length: 20 }).map((_, i) => (
-            <motion.div
-              key={i}
-              className="flex items-center justify-between py-2 px-3 bg-muted/30 rounded"
-              initial={{ opacity: 0, x: -20 }}
-              animate={{ opacity: 1, x: 0 }}
-              transition={{ delay: i * 0.02 }}
-            >
-              <div className="flex items-center gap-3">
-                <div className="w-8 h-8 bg-gradient-to-r from-primary/20 to-primary/40 rounded-full animate-pulse flex items-center justify-center">
-                  <span className="text-xs font-bold">{i + 1}</span>
-                </div>
-                <div className="space-y-1">
-                  <div className="h-4 w-20 bg-muted rounded animate-pulse" />
-                  <div className="h-3 w-16 bg-muted/60 rounded animate-pulse" />
-                </div>
+        <div className="space-y-4">
+          {/* Temperature */}
+          <div className="flex items-center justify-between">
+            <div className="flex items-center gap-2">
+              <Thermometer className="w-4 h-4" />
+              <span className="text-sm">Air Temperature</span>
+            </div>
+            <span className="font-mono font-bold" style={{ color: colors.primary }}>
+              {Math.round(weather.air_temperature)}°C
+            </span>
+          </div>
+
+          {/* Track Temperature */}
+          <div className="flex items-center justify-between">
+            <div className="flex items-center gap-2">
+              <Activity className="w-4 h-4" />
+              <span className="text-sm">Track Temperature</span>
+            </div>
+            <span className="font-mono font-bold">
+              {Math.round(weather.track_temperature)}°C
+            </span>
+          </div>
+
+          {/* Wind */}
+          <div className="flex items-center justify-between">
+            <div className="flex items-center gap-2">
+              <Wind className="w-4 h-4" />
+              <span className="text-sm">Wind</span>
+            </div>
+            <span className="font-mono font-bold">
+              {Math.round(weather.wind_speed)} km/h {weather.wind_direction}
+            </span>
+          </div>
+
+          {/* Humidity */}
+          <div className="flex items-center justify-between">
+            <div className="flex items-center gap-2">
+              <Droplets className="w-4 h-4" />
+              <span className="text-sm">Humidity</span>
+            </div>
+            <span className="font-mono font-bold">
+              {Math.round(weather.humidity)}%
+            </span>
+          </div>
+
+          {/* Rain */}
+          {weather.rainfall > 0 && (
+            <div className="flex items-center justify-between">
+              <div className="flex items-center gap-2">
+                <Droplets className="w-4 h-4 text-blue-500" />
+                <span className="text-sm">Rainfall</span>
               </div>
-              <div className="text-right space-y-1">
-                <div className="h-4 w-12 bg-muted rounded animate-pulse" />
-                <div className="h-3 w-8 bg-muted/60 rounded animate-pulse" />
-              </div>
-            </motion.div>
-          ))}
+              <span className="font-mono font-bold text-blue-500">
+                {weather.rainfall}mm
+              </span>
+            </div>
+          )}
         </div>
       </CardContent>
     </Card>
   )
 }
 
-function LiveStatsOverviewSkeleton() {
+// Main live dashboard content
+function LiveDashboardContent() {
+  const sessionKey = "latest" // Use latest session
+  const [selectedDriverNumber, setSelectedDriverNumber] = useState<number>(1)
+  const [isFullscreen, setIsFullscreen] = useState(false)
+  const [showControls, setShowControls] = useState(true)
+  
+  const {
+    sessionState,
+    setSessionState,
+    isLoading,
+    error,
+    connectionState,
+    reconnect,
+    disconnect,
+    refresh
+  } = useLiveSessionData(sessionKey)
+
+  // Handle driver selection
+  const handleDriverSelect = useCallback((driverNumber: number) => {
+    setSelectedDriverNumber(driverNumber)
+    setSessionState(prev => ({
+      ...prev,
+      selectedDrivers: [driverNumber, ...prev.selectedDrivers.filter(d => d !== driverNumber)].slice(0, 6)
+    }))
+  }, [setSessionState])
+
+  // Auto-hide controls in fullscreen
+  useEffect(() => {
+    if (isFullscreen) {
+      const timer = setTimeout(() => setShowControls(false), 3000)
+      return () => clearTimeout(timer)
+    } else {
+      setShowControls(true)
+    }
+  }, [isFullscreen])
+
+  if (isLoading) {
+    return (
+      <div className="flex items-center justify-center min-h-[60vh]">
+        <div className="text-center">
+          <LoadingSpinner size="lg" />
+          <h3 className="text-xl font-bold font-formula1 mt-4 mb-2">
+            Connecting to Live Session
+          </h3>
+          <p className="text-muted-foreground">
+            Establishing real-time telemetry connection...
+          </p>
+        </div>
+      </div>
+    )
+  }
+
+  if (error) {
+    return (
+      <div className="flex items-center justify-center min-h-[60vh]">
+        <Card className="max-w-md">
+          <CardHeader>
+            <div className="flex items-center gap-2 text-destructive">
+              <WifiOff className="w-5 h-5" />
+              <CardTitle>Connection Error</CardTitle>
+            </div>
+          </CardHeader>
+          <CardContent>
+            <p className="text-sm text-muted-foreground mb-4">{error}</p>
+            <div className="flex gap-2">
+              <AnimatedButton onClick={refresh} className="flex-1">
+                <RefreshCw className="w-4 h-4 mr-2" />
+                Retry Connection
+              </AnimatedButton>
+              <AnimatedButton 
+                variant="outline" 
+                onClick={() => window.location.href = '/dashboard'}
+              >
+                Back to Dashboard
+              </AnimatedButton>
+            </div>
+          </CardContent>
+        </Card>
+      </div>
+    )
+  }
+
   return (
-    <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-      {{
-        label: "Fastest Lap", icon: Clock },
-        { label: "Top Speed", icon: Gauge },
-        { label: "Leaders", icon: TrendingUp },
-        { label: "Active Cars", icon: Users }
-      ].map((stat, i) => {
-        const IconComponent = stat.icon
-        return (
-          <Card key={i} className="p-4 animate-pulse">
-            <div className="flex items-center gap-3 mb-2">
-              <div className="w-10 h-10 rounded-full bg-muted flex items-center justify-center">
-                <IconComponent className="w-6 h-6 text-muted-foreground" />
+    <div className={`space-y-6 ${isFullscreen ? 'fixed inset-0 z-50 bg-background p-4 overflow-auto' : ''}`}>
+      {/* Header */}
+      <AnimatePresence>
+        {(!isFullscreen || showControls) && (
+          <motion.div
+            initial={{ opacity: 0, y: -20 }}
+            animate={{ opacity: 1, y: 0 }}
+            exit={{ opacity: 0, y: -20 }}
+            className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4"
+          >
+            <div>
+              <div className="flex items-center gap-4 mb-2">
+                <h1 className="text-2xl sm:text-3xl font-bold font-formula1">
+                  LIVE TELEMETRY
+                </h1>
+                <Badge 
+                  variant={sessionState.isLive ? "default" : "secondary"}
+                  className="font-formula1"
+                >
+                  <Radio className={`w-3 h-3 mr-1 ${sessionState.isLive ? 'animate-pulse' : ''}`} />
+                  {sessionState.isLive ? 'LIVE' : 'PRACTICE'}
+                </Badge>
               </div>
-              <div className="flex-1 space-y-1">
-                <div className="h-4 bg-muted rounded" />
-                <div className="h-3 bg-muted/60 rounded" />
+              
+              <div className="flex items-center gap-4 text-sm text-muted-foreground">
+                <span>{sessionState.trackName}</span>
+                <span>•</span>
+                <span>{sessionState.sessionType}</span>
+                {sessionState.totalLaps > 0 && (
+                  <>
+                    <span>•</span>
+                    <span>Lap {sessionState.currentLap}/{sessionState.totalLaps}</span>
+                  </>
+                )}
+                <span>•</span>
+                <span>Updated {sessionState.lastUpdate.toLocaleTimeString()}</span>
               </div>
             </div>
-            <div className="h-6 bg-muted rounded" />
-          </Card>
-        )
-      })}
-    </div>
-  )
-}
 
-// Enhanced live telemetry content with progressive loading
-function LiveTelemetryContent() {
-  const { setSelectedDriverNumber, connectionStatus } = useTelemetry()
-  const [driverOptions, setDriverOptions] = useState<{ number: number, name: string }[]>([])
-  const [selectedDriver, setSelectedDriver] = useState<number | null>(null)
-  const [expandedSections, setExpandedSections] = useState({
-    core: true,
-    liveData: false,
-    analytics: false
-  })
-  const [lastUpdate, setLastUpdate] = useState<Date>(new Date())
-  
-  const sessionKey = "latest"
+            <div className="flex items-center gap-2">
+              <ConnectionStatusIndicator 
+                service="all"
+                size="sm"
+                showSignalStrength={true}
+              />
+              
+              <AnimatedButton
+                variant="ghost"
+                size="sm"
+                onClick={() => setIsFullscreen(!isFullscreen)}
+              >
+                {isFullscreen ? <Minimize className="w-4 h-4" /> : <Maximize className="w-4 h-4" />}
+              </AnimatedButton>
 
-  // Intersection observers for progressive loading
-  const { ref: liveDataRef, inView: liveDataInView } = useInView({
-    threshold: 0.1,
-    triggerOnce: true
-  })
-
-  const { ref: analyticsRef, inView: analyticsInView } = useInView({
-    threshold: 0.1,
-    triggerOnce: true
-  })
-
-  // Update timestamp periodically to show live status
-  useEffect(() => {
-    const interval = setInterval(() => {
-      setLastUpdate(new Date())
-    }, 1000)
-    return () => clearInterval(interval)
-  }, [])
-
-  // Fetch available drivers for the session
-  useEffect(() => {
-    const openf1 = new OpenF1Service("https://api.openf1.org/v1")
-    openf1.getDriverInfo("latest").then(drivers => {
-      if (Array.isArray(drivers) && drivers.length) {
-        const driverOpts = drivers.map(d => ({
-          number: d.driver_number,
-          name: d.broadcast_name || d.full_name || `Driver #${d.driver_number}`
-        }))
-        setDriverOptions(driverOpts)
-        
-        // Set default driver if none selected
-        if (!selectedDriver && driverOpts.length > 0) {
-          const defaultDriver = driverOpts[0].number
-          setSelectedDriver(defaultDriver)
-          setSelectedDriverNumber(defaultDriver)
-        }
-      }
-    }).catch(console.error)
-  }, [selectedDriver, setSelectedDriverNumber])
-  
-  const handleDriverChange = (e: React.ChangeEvent<HTMLSelectElement>) => {
-    const driverNumber = Number(e.target.value)
-    setSelectedDriver(driverNumber)
-    setSelectedDriverNumber(driverNumber)
-  }
-
-  const toggleSection = (section: keyof typeof expandedSections) => {
-    setExpandedSections(prev => ({ ...prev, [section]: !prev[section] }))
-  }
-
-  const getConnectionStatusColor = () => {
-    switch (connectionStatus.telemetry) {
-      case 'open': return 'text-green-500'
-      case 'connecting': return 'text-yellow-500'
-      case 'error': case 'closed': return 'text-red-500'
-      default: return 'text-gray-500'
-    }
-  }
-
-  const getConnectionStatusText = () => {
-    switch (connectionStatus.telemetry) {
-      case 'open': return 'Live'
-      case 'connecting': return 'Connecting...'
-      case 'error': return 'Error'
-      case 'closed': return 'Disconnected'
-      default: return 'Unknown'
-    }
-  }
-  
-  return (
-    <div className="space-y-4 md:space-y-6">
-      {/* Enhanced mobile-first header with driver selection and live status */}
-      <div className="flex flex-col space-y-4 sm:space-y-0 sm:flex-row sm:gap-4 sm:justify-between sm:items-center">
-        <div className="flex flex-col space-y-2 sm:space-y-0 sm:flex-row sm:items-center sm:gap-4">
-          <h1 className="text-xl sm:text-2xl font-bold font-formula1">Live Telemetry</h1>
-          <div className="flex items-center gap-2">
-            <div className={`w-3 h-3 rounded-full ${connectionStatus.telemetry === 'open' ? 'bg-green-500 animate-pulse' : 'bg-gray-400'}`} />
-            <span className={`text-xs sm:text-sm font-medium ${getConnectionStatusColor()}`}>
-              {getConnectionStatusText()}
-            </span>
-            {connectionStatus.telemetry === 'open' && (
-              <span className="text-xs text-muted-foreground hidden sm:inline">
-                Last update: {lastUpdate.toLocaleTimeString()}
-              </span>
-            )}
-          </div>
-        </div>
-        
-        <div className="flex flex-col space-y-2 sm:space-y-0 sm:flex-row sm:items-center sm:gap-4">
-          {/* Enhanced mobile-friendly driver selection */}
-          <div className="flex flex-col sm:flex-row sm:items-center gap-2">
-            <label htmlFor="driver-select" className="text-sm font-medium whitespace-nowrap">Driver:</label>
-            <select 
-              id="driver-select"
-              className="rounded bg-background border px-3 py-2 text-sm w-full sm:min-w-[150px] sm:w-auto"
-              value={selectedDriver || ""}
-              onChange={handleDriverChange}
-            >
-              {driverOptions.length === 0 ? (
-                <option value="">Loading drivers...</option>
-              ) : (
-                driverOptions.map(d => (
-                  <option key={d.number} value={d.number}>
-                    #{d.number} {d.name}
-                  </option>
-                ))
+              {connectionState !== 'open' && (
+                <AnimatedButton
+                  variant="outline"
+                  size="sm"
+                  onClick={reconnect}
+                  loading={connectionState === 'connecting'}
+                  loadingText="Connecting..."
+                >
+                  <RefreshCw className="w-4 h-4 mr-1" />
+                  Reconnect
+                </AnimatedButton>
               )}
-            </select>
-          </div>
+            </div>
+          </motion.div>
+        )}
+      </AnimatePresence>
 
-          {/* Manual refresh button for when connection is down */}
-          {connectionStatus.telemetry !== 'open' && (
-            <Button 
-              variant="outline" 
-              size="sm"
-              onClick={() => window.location.reload()}
-              className="flex items-center justify-center gap-2 w-full sm:w-auto"
-            >
-              <RefreshCw className="w-4 h-4" />
-              <span className="sm:hidden">Reconnect</span>
-              <span className="hidden sm:inline">Reconnect</span>
-            </Button>
-          )}
+      {/* Main Content Grid */}
+      <div className="grid grid-cols-1 lg:grid-cols-4 gap-6">
+        {/* Telemetry Display - Takes up 3 columns */}
+        <div className="lg:col-span-3">
+          <LiveTelemetryDisplay
+            drivers={sessionState.drivers}
+            selectedDrivers={sessionState.selectedDrivers}
+            onDriverSelect={handleDriverSelect}
+          />
+        </div>
+
+        {/* Side Panel - 1 column */}
+        <div className="space-y-6">
+          <LiveWeatherWidget weather={sessionState.weather} />
+          <LiveDriverPositions drivers={sessionState.drivers} />
         </div>
       </div>
 
-      {/* Mobile-optimized section headers */}
-      <section className="space-y-3 sm:space-y-4">
-        <div className="flex items-center justify-between">
-          <h2 className="text-lg sm:text-xl font-semibold font-formula1 flex items-center gap-2">
-            <Radio className="w-4 h-4 sm:w-5 sm:h-5" />
-            <span className="truncate">Live Core Data</span>
-          </h2>
-          <Button
+      {/* Floating Controls for Fullscreen */}
+      {isFullscreen && (
+        <motion.div
+          className="fixed bottom-4 right-4 flex items-center gap-2 bg-background/90 backdrop-blur-sm border rounded-lg p-2"
+          initial={{ opacity: 0, y: 20 }}
+          animate={{ opacity: 1, y: 0 }}
+          onMouseEnter={() => setShowControls(true)}
+        >
+          <AnimatedButton
             variant="ghost"
             size="sm"
-            onClick={() => toggleSection('core')}
-            className="flex items-center gap-1 sm:gap-2 text-xs sm:text-sm"
+            onClick={() => setShowControls(!showControls)}
           >
-            <span className="hidden sm:inline">{expandedSections.core ? 'Collapse' : 'Expand'}</span>
-            <span className="sm:hidden">{expandedSections.core ? '−' : '+'}</span>
-          </Button>
-        </div>
-        
-        {/* Rest of the sections remain the same but with responsive spacing */}
-        <AnimatePresence>
-          {expandedSections.core && (
-            <motion.div
-              initial={{ height: 0, opacity: 0 }}
-              animate={{ height: 'auto', opacity: 1 }}
-              exit={{ height: 0, opacity: 0 }}
-              transition={{ duration: 0.3 }}
-              className="overflow-hidden"
-            >
-              <div className="grid grid-cols-1 gap-3 sm:gap-4">
-                {/* Primary Telemetry Display */}
-                <Suspense fallback={<LiveTelemetryDisplaySkeleton />}>
-                  <TelemetryDisplay fallbackApiUrl="/api/telemetry/latest" />
-                </Suspense>
-
-                {/* Mobile-first grid for Track and Driver Information */}
-                <div className="grid grid-cols-1 gap-3 sm:gap-4 lg:grid-cols-2">
-                  <Suspense fallback={<LiveTrackMapSkeleton />}>
-                    <TrackMap />
-                  </Suspense>
-
-                  <Suspense fallback={<LiveDriverPanelSkeleton />}>
-                    <DriverPanel />
-                  </Suspense>
-                </div>
-
-                {/* Weather Information */}
-                <Suspense fallback={<LiveWeatherSkeleton />}>
-                  <WeatherOverlay />
-                </Suspense>
-              </div>
-            </motion.div>
-          )}
-        </AnimatePresence>
-      </section>
-
-      {/* Enhanced mobile responsive sections for Live Data Stream and Analytics */}
-      {/* ... rest of sections with similar mobile improvements ... */}
+            {showControls ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+          </AnimatedButton>
+          
+          <AnimatedButton
+            variant="ghost"
+            size="sm"
+            onClick={() => setIsFullscreen(false)}
+          >
+            <Minimize className="w-4 h-4" />
+          </AnimatedButton>
+        </motion.div>
+      )}
     </div>
   )
 }
 
-export default function LiveTelemetryPage() {
-  const sessionKey = "latest"
-  
+// Main page component
+export default function LiveDashboardPage() {
   return (
     <>
       <Header />
@@ -628,51 +857,11 @@ export default function LiveTelemetryPage() {
           <MobileNav />
         </div>
         <main className="flex-1 p-2 sm:p-4 md:p-6 w-full max-w-full overflow-x-hidden">
-          <TelemetryProvider initialSessionKey={sessionKey}>
-            <Suspense fallback={<EnhancedLiveDashboardSkeleton />}>
-              <LiveTelemetryContent />
-            </Suspense>
+          <TelemetryProvider initialSessionKey="latest">
+            <LiveDashboardContent />
           </TelemetryProvider>
         </main>
       </div>
     </>
-  )
-}
-
-// Enhanced loading skeleton for the entire page
-function EnhancedLiveDashboardSkeleton() {
-  return (
-    <div className="space-y-6">
-      {/* Header skeleton */}
-      <div className="flex flex-col sm:flex-row gap-4 justify-between items-start sm:items-center">
-        <div className="flex items-center gap-4">
-          <div className="h-8 w-64 bg-muted rounded animate-pulse" />
-          <div className="flex items-center gap-2">
-            <div className="w-3 h-3 bg-muted rounded-full animate-pulse" />
-            <div className="h-4 w-16 bg-muted rounded animate-pulse" />
-          </div>
-        </div>
-        <div className="flex items-center gap-4">
-          <div className="h-10 w-40 bg-muted rounded animate-pulse" />
-          <div className="h-10 w-24 bg-muted rounded animate-pulse" />
-        </div>
-      </div>
-
-      {/* Core section skeleton */}
-      <div className="space-y-4">
-        <div className="flex items-center justify-between">
-          <div className="h-6 w-40 bg-muted rounded animate-pulse" />
-          <div className="h-8 w-20 bg-muted rounded animate-pulse" />
-        </div>
-        <div className="grid grid-cols-1 gap-4">
-          <LiveTelemetryDisplaySkeleton />
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-            <LiveTrackMapSkeleton />
-            <LiveDriverPanelSkeleton />
-          </div>
-          <LiveWeatherSkeleton />
-        </div>
-      </div>
-    </div>
   )
 }

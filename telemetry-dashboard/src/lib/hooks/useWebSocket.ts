@@ -377,3 +377,65 @@ export function useOpenF1Telemetry(sessionKey: string | null, driverNumber?: num
     }
   });
 }
+
+// Enhanced hook for live dashboard with better error handling
+export function useLiveTelemetryStream(sessionKey: string | null) {
+  const [drivers, setDrivers] = useState<any[]>([])
+  const [sessionInfo, setSessionInfo] = useState<any>(null)
+  const [lastUpdate, setLastUpdate] = useState<Date>(new Date())
+
+  const { data, connectionState, error, reconnect, disconnect } = useOpenF1Telemetry(sessionKey)
+
+  // Process incoming telemetry data
+  useEffect(() => {
+    if (data) {
+      const now = new Date()
+      
+      if (Array.isArray(data)) {
+        // Bulk update from multiple drivers
+        setDrivers(prevDrivers => {
+          const updatedDrivers = [...prevDrivers]
+          
+          data.forEach(driverData => {
+            const existingIndex = updatedDrivers.findIndex(d => d.driver_number === driverData.driver_number)
+            
+            if (existingIndex >= 0) {
+              updatedDrivers[existingIndex] = { ...updatedDrivers[existingIndex], ...driverData, timestamp: now.getTime() }
+            } else {
+              updatedDrivers.push({ ...driverData, timestamp: now.getTime() })
+            }
+          })
+          
+          return updatedDrivers
+        })
+      } else if (data.driver_number) {
+        // Single driver update
+        setDrivers(prevDrivers => {
+          const updatedDrivers = [...prevDrivers]
+          const existingIndex = updatedDrivers.findIndex(d => d.driver_number === data.driver_number)
+          
+          if (existingIndex >= 0) {
+            updatedDrivers[existingIndex] = { ...updatedDrivers[existingIndex], ...data, timestamp: now.getTime() }
+          } else {
+            updatedDrivers.push({ ...data, timestamp: now.getTime() })
+          }
+          
+          return updatedDrivers
+        })
+      }
+      
+      setLastUpdate(now)
+    }
+  }, [data])
+
+  return {
+    drivers,
+    sessionInfo,
+    lastUpdate,
+    connectionState,
+    error,
+    reconnect,
+    disconnect,
+    isLive: connectionState === 'open'
+  }
+}

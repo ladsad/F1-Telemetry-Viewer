@@ -9,16 +9,182 @@ interface OpenF1RequestOptions {
     auth?: boolean
 }
 
+// Environment configuration with validation
+interface OpenF1Config {
+    baseUrl: string
+    wsUrl?: string
+    apiKey?: string
+    clientId?: string
+    clientSecret?: string
+    enableCache?: boolean
+    defaultCacheTtl?: number
+    rateLimit?: {
+        max: number
+        intervalMs: number
+    }
+}
+
+// Configuration errors
+export class ConfigurationError extends Error {
+    constructor(message: string, public code: string) {
+        super(message)
+        this.name = 'ConfigurationError'
+    }
+}
+
 export class OpenF1Service {
-    private baseUrl: string
+    private config: OpenF1Config
     private token: string | null = null
     private cache: Map<string, { data: any; expires: number }> = new Map()
-    private rateLimit: { max: number; intervalMs: number }
     private requestTimestamps: number[] = []
 
-    constructor(baseUrl: string, rateLimit = { max: 10, intervalMs: 1000 }) {
-        this.baseUrl = baseUrl
-        this.rateLimit = rateLimit
+    constructor(baseUrlOrConfig?: string | OpenF1Config, rateLimit = { max: 10, intervalMs: 1000 }) {
+        // Handle both old string constructor and new config object
+        if (typeof baseUrlOrConfig === 'string') {
+            this.config = this.createConfigFromUrl(baseUrlOrConfig, rateLimit)
+        } else if (baseUrlOrConfig) {
+            this.config = this.validateConfig(baseUrlOrConfig)
+        } else {
+            this.config = this.createConfigFromEnvironment(rateLimit)
+        }
+
+        this.validateConfiguration()
+    }
+
+    /**
+     * Create configuration from environment variables
+     */
+    private createConfigFromEnvironment(rateLimit: { max: number; intervalMs: number }): OpenF1Config {
+        const baseUrl = this.getEnvironmentVariable('NEXT_PUBLIC_OPENF1_API_URL', 'https://api.openf1.org/v1')
+        const wsUrl = this.getEnvironmentVariable('NEXT_PUBLIC_OPENF1_WS_URL')
+        const apiKey = this.getEnvironmentVariable('OPENF1_API_KEY')
+        const clientId = this.getEnvironmentVariable('OPENF1_CLIENT_ID')
+        const clientSecret = this.getEnvironmentVariable('OPENF1_CLIENT_SECRET')
+
+        // Parse rate limit from environment if available
+        const envRateMax = this.getEnvironmentVariable('NEXT_PUBLIC_OPENF1_RATE_LIMIT_MAX')
+        const envRateInterval = this.getEnvironmentVariable('NEXT_PUBLIC_OPENF1_RATE_LIMIT_INTERVAL')
+        
+        const finalRateLimit = {
+            max: envRateMax ? parseInt(envRateMax, 10) : rateLimit.max,
+            intervalMs: envRateInterval ? parseInt(envRateInterval, 10) : rateLimit.intervalMs
+        }
+
+        return {
+            baseUrl: baseUrl.endsWith('/') ? baseUrl.slice(0, -1) : baseUrl,
+            wsUrl,
+            apiKey,
+            clientId,
+            clientSecret,
+            enableCache: this.getEnvironmentVariable('NEXT_PUBLIC_ENABLE_OPENF1_CACHE', 'true') === 'true',
+            defaultCacheTtl: parseInt(this.getEnvironmentVariable('NEXT_PUBLIC_OPENF1_CACHE_TTL', '10000'), 10),
+            rateLimit: finalRateLimit
+        }
+    }
+
+    /**
+     * Create configuration from legacy URL parameter
+     */
+    private createConfigFromUrl(baseUrl: string, rateLimit: { max: number; intervalMs: number }): OpenF1Config {
+        return {
+            baseUrl: baseUrl.endsWith('/') ? baseUrl.slice(0, -1) : baseUrl,
+            enableCache: true,
+            defaultCacheTtl: 10000,
+            rateLimit
+        }
+    }
+
+    /**
+     * Validate provided configuration object
+     */
+    private validateConfig(config: OpenF1Config): OpenF1Config {
+        const validated = {
+            ...config,
+            baseUrl: config.baseUrl.endsWith('/') ? config.baseUrl.slice(0, -1) : config.baseUrl,
+            enableCache: config.enableCache ?? true,
+            defaultCacheTtl: config.defaultCacheTtl ?? 10000,
+            rateLimit: config.rateLimit ?? { max: 10, intervalMs: 1000 }
+        }
+
+        return validated
+    }
+
+    /**
+     * Get environment variable with optional default
+     */
+    private getEnvironmentVariable(name: string, defaultValue?: string): string | undefined {
+        // Check both process.env (server) and window (client-side Next.js)
+        let value: string | undefined
+
+        if (typeof process !== 'undefined' && process.env) {
+            value = process.env[name]
+        }
+
+        // For client-side, check if the variable is exposed via NEXT_PUBLIC_ prefix
+        if (!value && typeof window !== 'undefined' && name.startsWith('NEXT_PUBLIC_')) {
+            // In client-side builds, environment variables are replaced at build time
+            // This is a fallback for runtime access
+            value = (window as any).__NEXT_DATA__?.buildId ? undefined : process?.env?.[name]
+        }
+
+        return value || defaultValue
+    }
+
+    /**
+     * Validate that required configuration is present
+     */
+    private validateConfiguration(): void {
+        if (!this.config.baseUrl) {
+            throw new ConfigurationError(
+                'OpenF1 API base URL is required. Set NEXT_PUBLIC_OPENF1_API_URL environment variable or provide baseUrl in constructor.',
+                'MISSING_BASE_URL'
+            )
+        }
+
+        try {
+            new URL(this.config.baseUrl)
+        } catch {
+            throw new ConfigurationError(
+                `Invalid OpenF1 API base URL: ${this.config.baseUrl}. Please provide a valid URL.`,
+                'INVALID_BASE_URL'
+            )
+        }
+
+        // Validate rate limit configuration
+        if (this.config.rateLimit) {
+            if (this.config.rateLimit.max <= 0 || this.config.rateLimit.intervalMs <= 0) {
+                throw new ConfigurationError(
+                    'Rate limit configuration must have positive values for max and intervalMs.',
+                    'INVALID_RATE_LIMIT'
+                )
+            }
+        }
+
+        // Log configuration in debug mode
+        if (this.getEnvironmentVariable('NEXT_PUBLIC_DEBUG_MODE') === 'true') {
+            console.log('OpenF1Service configuration:', {
+                baseUrl: this.config.baseUrl,
+                wsUrl: this.config.wsUrl ? '[SET]' : '[NOT SET]',
+                apiKey: this.config.apiKey ? '[SET]' : '[NOT SET]',
+                enableCache: this.config.enableCache,
+                rateLimit: this.config.rateLimit
+            })
+        }
+    }
+
+    /**
+     * Get current configuration
+     */
+    getConfig(): Readonly<OpenF1Config> {
+        return { ...this.config }
+    }
+
+    /**
+     * Update configuration
+     */
+    updateConfig(updates: Partial<OpenF1Config>): void {
+        this.config = this.validateConfig({ ...this.config, ...updates })
+        this.validateConfiguration()
     }
 
     setToken(token: string) {
@@ -30,10 +196,24 @@ export class OpenF1Service {
     }
 
     private getAuthHeaders(): Record<string, string> {
-        return this.token ? { Authorization: `Bearer ${this.token}` } : {}
+        const headers: Record<string, string> = {}
+
+        // Add API key if available
+        if (this.config.apiKey) {
+            headers['X-API-Key'] = this.config.apiKey
+        }
+
+        // Add bearer token if available
+        if (this.token) {
+            headers['Authorization'] = `Bearer ${this.token}`
+        }
+
+        return headers
     }
 
     private getCache(key: string) {
+        if (!this.config.enableCache) return null
+
         const entry = this.cache.get(key)
         if (entry && entry.expires > Date.now()) {
             return entry.data
@@ -43,21 +223,57 @@ export class OpenF1Service {
     }
 
     private setCache(key: string, data: any, ttlMs: number) {
+        if (!this.config.enableCache) return
+
+        // Prevent cache from growing too large
+        if (this.cache.size > 1000) {
+            // Remove oldest entries (simple LRU-like behavior)
+            const entries = Array.from(this.cache.entries())
+            entries.sort((a, b) => a[1].expires - b[1].expires)
+            entries.slice(0, 200).forEach(([key]) => this.cache.delete(key))
+        }
+
         this.cache.set(key, { data, expires: Date.now() + ttlMs })
     }
 
     private async enforceRateLimit() {
+        if (!this.config.rateLimit) return
+
         const now = Date.now()
         // Remove timestamps outside the interval
         this.requestTimestamps = this.requestTimestamps.filter(
-            ts => now - ts < this.rateLimit.intervalMs
+            ts => now - ts < this.config.rateLimit!.intervalMs
         )
-        if (this.requestTimestamps.length >= this.rateLimit.max) {
-            const waitTime =
-                this.rateLimit.intervalMs - (now - this.requestTimestamps[0])
+        
+        if (this.requestTimestamps.length >= this.config.rateLimit.max) {
+            const waitTime = this.config.rateLimit.intervalMs - (now - this.requestTimestamps[0])
+            
+            if (this.getEnvironmentVariable('NEXT_PUBLIC_DEBUG_MODE') === 'true') {
+                console.log(`Rate limit hit, waiting ${waitTime}ms`)
+            }
+            
             await new Promise(res => setTimeout(res, waitTime))
         }
+        
         this.requestTimestamps.push(Date.now())
+    }
+
+    /**
+     * Clear cache
+     */
+    clearCache(): void {
+        this.cache.clear()
+    }
+
+    /**
+     * Get cache statistics
+     */
+    getCacheStats(): { size: number; hitRate: number } {
+        // This is a simplified version - you could implement more detailed stats
+        return {
+            size: this.cache.size,
+            hitRate: 0 // Placeholder - implement actual hit rate tracking if needed
+        }
     }
 
     async request<T = any>(
@@ -69,61 +285,115 @@ export class OpenF1Service {
             headers = {},
             body,
             cacheKey,
-            cacheTtlMs = 10000,
+            cacheTtlMs = this.config.defaultCacheTtl || 10000,
             auth = true,
         } = options
 
-        const url = `${this.baseUrl}${endpoint}`
+        // Ensure endpoint starts with /
+        const cleanEndpoint = endpoint.startsWith('/') ? endpoint : `/${endpoint}`
+        const url = `${this.config.baseUrl}${cleanEndpoint}`
 
-        // Caching
+        // Caching for GET requests
         const key = cacheKey || `${method}:${url}:${body ? JSON.stringify(body) : ""}`
         if (method === "GET") {
             const cached = this.getCache(key)
-            if (cached) return cached
+            if (cached) {
+                if (this.getEnvironmentVariable('NEXT_PUBLIC_DEBUG_MODE') === 'true') {
+                    console.log(`Cache hit for: ${url}`)
+                }
+                return cached
+            }
         }
 
         // Rate limiting
         await this.enforceRateLimit()
 
-        // Auth
+        // Build headers
         const reqHeaders: Record<string, string> = {
             "Content-Type": "application/json",
             ...headers,
             ...(auth ? this.getAuthHeaders() : {}),
         }
 
+        // Add user agent for identification
+        if (typeof window === 'undefined') {
+            reqHeaders['User-Agent'] = 'F1-Telemetry-Dashboard/1.0.0'
+        }
+
         let res: Response
         try {
+            if (this.getEnvironmentVariable('NEXT_PUBLIC_DEBUG_MODE') === 'true') {
+                console.log(`Making ${method} request to: ${url}`)
+            }
+
             res = await fetch(url, {
                 method,
                 headers: reqHeaders,
                 body: body ? JSON.stringify(body) : undefined,
+                // Add timeout for better error handling
+                signal: AbortSignal.timeout(30000) // 30 second timeout
             })
         } catch (err) {
+            if (err instanceof DOMException && err.name === 'TimeoutError') {
+                throw new Error(`Request timeout: The OpenF1 API took too long to respond`)
+            }
             throw new Error(`Network error: ${(err as Error).message}`)
         }
 
         if (!res.ok) {
             let errorMsg = `OpenF1 API error: ${res.status} ${res.statusText}`
+            let errorDetails: any = null
+
             try {
-                const errorData = await res.json()
-                errorMsg += ` - ${JSON.stringify(errorData)}`
+                errorDetails = await res.json()
+                if (errorDetails.error) {
+                    errorMsg += ` - ${errorDetails.error}`
+                }
+                if (errorDetails.message) {
+                    errorMsg += ` - ${errorDetails.message}`
+                }
             } catch {
-                // ignore JSON parse errors
+                // Ignore JSON parse errors for error response
             }
-            throw new Error(errorMsg)
+
+            // Handle specific error codes
+            switch (res.status) {
+                case 401:
+                    throw new Error(`Authentication failed: ${errorMsg}. Check your API key or credentials.`)
+                case 403:
+                    throw new Error(`Access forbidden: ${errorMsg}. Check your permissions.`)
+                case 404:
+                    throw new Error(`Resource not found: ${errorMsg}. The requested endpoint or data may not exist.`)
+                case 429:
+                    throw new Error(`Rate limit exceeded: ${errorMsg}. Please reduce request frequency.`)
+                case 500:
+                case 502:
+                case 503:
+                case 504:
+                    throw new Error(`OpenF1 server error: ${errorMsg}. The service may be temporarily unavailable.`)
+                default:
+                    throw new Error(errorMsg)
+            }
         }
 
         let data: T
         try {
-            data = await res.json()
+            const text = await res.text()
+            if (!text) {
+                // Handle empty responses
+                data = (method === "DELETE" ? {} : []) as T
+            } else {
+                data = JSON.parse(text)
+            }
         } catch (err) {
-            throw new Error("Failed to parse API response as JSON")
+            throw new Error(`Failed to parse API response as JSON: ${(err as Error).message}`)
         }
 
+        // Cache successful GET responses
         if (method === "GET") {
             this.setCache(key, data, cacheTtlMs)
         }
+
         return data
     }
 
@@ -151,7 +421,7 @@ export class OpenF1Service {
             })) : []
         } catch (error) {
             console.error('Error fetching car telemetry:', error)
-            return []
+            throw error // Re-throw to allow caller to handle
         }
     }
 
@@ -202,7 +472,7 @@ export class OpenF1Service {
             })) : []
         } catch (error) {
             console.error('Error fetching weather:', error)
-            return []
+            throw error
         }
     }
 
@@ -222,7 +492,7 @@ export class OpenF1Service {
             })) : []
         } catch (error) {
             console.error('Error fetching driver positions:', error)
-            return []
+            throw error
         }
     }
 
@@ -237,7 +507,7 @@ export class OpenF1Service {
             return await this.request(endpoint)
         } catch (error) {
             console.error('Error fetching sessions:', error)
-            return []
+            throw error
         }
     }
     
@@ -247,7 +517,7 @@ export class OpenF1Service {
             return Array.isArray(sessions) ? sessions[0] : sessions
         } catch (error) {
             console.error('Error fetching session details:', error)
-            return null
+            throw error
         }
     }
 
@@ -266,7 +536,7 @@ export class OpenF1Service {
     }
     
     async getCalendar(season: number) {
-        return this.request(`/sessions?season=${season}`)
+        return this.request(`/v1/sessions?year=${season}`)
     }
     
     // Fetch sector timing data for a session (optionally for a driver)
@@ -281,7 +551,7 @@ export class OpenF1Service {
                 driver_number: interval.driver_number,
                 sector: 1,
                 sector_time: interval.gap_to_leader || 0,
-                performance: 'normal'
+                performance: 'normal' as const
             })) : []
         } catch (error) {
             console.error('Error fetching sector timings:', error)
@@ -291,19 +561,16 @@ export class OpenF1Service {
 
     // Fetch hourly weather data (if available)
     async getHourlyWeather(sessionKey: string) {
-        return this.request(`/weather_data/hourly?session_key=${sessionKey}`)
+        return this.request(`/v1/weather?session_key=${sessionKey}`)
     }
 
     // Fetch historic weather data (if available)
     async getHistoricWeather(sessionKey: string) {
-        return this.request(`/weather_data/historic?session_key=${sessionKey}`)
+        return this.request(`/v1/weather?session_key=${sessionKey}`)
     }
 
     // Fetch real-time driver status (tire, ERS, pit, etc.)
-    async getDriverStatus(
-        sessionKey: string,
-        driverNumber: number
-    ) {
+    async getDriverStatus(sessionKey: string, driverNumber: number) {
         try {
             // Combine data from multiple endpoints for driver status
             const [carData, stints] = await Promise.all([
@@ -322,10 +589,10 @@ export class OpenF1Service {
             return {
                 driver_number: driverNumber,
                 driver_name: `Driver #${driverNumber}`,
-                tire_compound: latestStint?.compound || 'Unknown',
+                tire_compound: latestStint?.compound || 'Unknown' as const,
                 tire_age: latestStint?.tyre_age_at_start || 0,
                 ers: latestCar?.drs ? 100 : 0, // Approximation
-                pit_status: 'None' // Would need pit data
+                pit_status: 'None' as const // Would need pit data
             }
         } catch (error) {
             console.error('Error fetching driver status:', error)
@@ -334,10 +601,7 @@ export class OpenF1Service {
     }
 
     // Fetch lap times for a driver in a session
-    async getLapTimes(
-        sessionKey: string,
-        driverNumber: number
-    ) {
+    async getLapTimes(sessionKey: string, driverNumber: number) {
         try {
             const data = await this.request(`/v1/laps?session_key=${sessionKey}&driver_number=${driverNumber}`)
             return Array.isArray(data) ? data.map(lap => ({
@@ -352,17 +616,14 @@ export class OpenF1Service {
     }
 
     // Fetch tire stints for a driver in a session
-    async getTireStints(
-        sessionKey: string,
-        driverNumber: number
-    ) {
+    async getTireStints(sessionKey: string, driverNumber: number) {
         try {
             const data = await this.request(`/v1/stints?session_key=${sessionKey}&driver_number=${driverNumber}`)
             return Array.isArray(data) ? data.map(stint => ({
                 driver_number: stint.driver_number,
                 start_lap: stint.lap_start,
                 end_lap: stint.lap_end,
-                compound: stint.compound || 'Unknown'
+                compound: stint.compound || 'Unknown' as const
             })) : []
         } catch (error) {
             console.error('Error fetching tire stints:', error)
@@ -371,10 +632,7 @@ export class OpenF1Service {
     }
 
     // Fetch radio messages for a driver in a session
-    async getRadioMessages(
-        sessionKey: string,
-        driverNumber: number
-    ) {
+    async getRadioMessages(sessionKey: string, driverNumber: number) {
         try {
             const data = await this.request(`/v1/team_radio?session_key=${sessionKey}&driver_number=${driverNumber}`)
             return Array.isArray(data) ? data.map(msg => ({
@@ -382,7 +640,7 @@ export class OpenF1Service {
                 session_key: msg.session_key,
                 timestamp: msg.date,
                 message: msg.recording_url ? 'Audio message available' : 'Message',
-                source: 'driver'
+                source: 'driver' as const
             })) : []
         } catch (error) {
             console.error('Error fetching radio messages:', error)
@@ -391,10 +649,7 @@ export class OpenF1Service {
     }
 
     // Fetch driver info for a session (optionally for a specific driver)
-    async getDriverInfo(
-        sessionKey: string,
-        driverNumber?: number
-    ) {
+    async getDriverInfo(sessionKey: string, driverNumber?: number) {
         try {
             let endpoint = `/v1/drivers?session_key=${sessionKey}`
             if (driverNumber !== undefined) endpoint += `&driver_number=${driverNumber}`
@@ -424,19 +679,13 @@ export class OpenF1Service {
     }
 
     // Fetch session events (pit stops, safety cars, crashes, etc.)
-    async getSessionEvents(
-        sessionKey: string
-    ) {
-        return this.request(`/session_events?session_key=${sessionKey}`)
+    async getSessionEvents(sessionKey: string) {
+        return this.request(`/v1/race_control?session_key=${sessionKey}`)
     }
 
     // Fetch delta times for a session (optional: for specific drivers)
-    async getDeltaTimes(
-        sessionKey: string,
-        driverNumbers?: number[],
-        referenceDriver?: number
-    ) {
-        let endpoint = `/delta_times?session_key=${sessionKey}`
+    async getDeltaTimes(sessionKey: string, driverNumbers?: number[], referenceDriver?: number) {
+        let endpoint = `/v1/intervals?session_key=${sessionKey}`
         if (driverNumbers && driverNumbers.length)
             endpoint += `&driver_numbers=${driverNumbers.join(",")}`
         if (referenceDriver !== undefined)
@@ -445,10 +694,7 @@ export class OpenF1Service {
     }
 
     // Fetch lap times, delta, or events with filters for analytics dashboard
-    async getAnalyticsData(
-        sessionKey: string,
-        filters: import("@/lib/api/types").AnalyticsFilter
-    ) {
+    async getAnalyticsData(sessionKey: string, filters: import("@/lib/api/types").AnalyticsFilter) {
         // Example: fetch lap times for selected drivers
         if (filters.metric === "lapTime") {
             return Promise.all(
@@ -510,6 +756,32 @@ export class OpenF1Service {
             }
         }
     }
+
+    /**
+     * Health check endpoint
+     */
+    async healthCheck(): Promise<{ status: 'ok' | 'error', message: string, timestamp: number }> {
+        try {
+            // Make a simple request to test the API
+            await this.getSessions(2024)
+            return {
+                status: 'ok',
+                message: 'OpenF1 API is accessible',
+                timestamp: Date.now()
+            }
+        } catch (error) {
+            return {
+                status: 'error',
+                message: error instanceof Error ? error.message : 'Unknown error',
+                timestamp: Date.now()
+            }
+        }
+    }
+}
+
+// Utility function to create a default OpenF1Service instance
+export function createOpenF1Service(config?: Partial<OpenF1Config>): OpenF1Service {
+    return new OpenF1Service(config)
 }
 
 // Utility to poll for weather and detect alerts (for use in WeatherAlert)
@@ -519,19 +791,32 @@ export async function pollWeatherForAlerts(
   intervalMs = 10000
 ) {
   let prev: import("@/lib/api/types").OpenF1WeatherData | null = null
-  const openf1 = new OpenF1Service("https://api.openf1.org/v1")
+  const openf1 = createOpenF1Service()
+  
   async function poll() {
     try {
       const data = await openf1.getWeather(sessionKey)
       if (Array.isArray(data) && data.length > 0) {
         const latest = data[data.length - 1]
         if (prev) {
-          // (alert logic as in WeatherAlert.tsx)
+          // Simple alert logic
+          if (latest.rainfall > prev.rainfall && latest.rainfall > 0) {
+            onAlert({ type: "rain_start", message: "Rain detected on track", icon: undefined })
+          }
+          if (latest.air_temperature > prev.air_temperature + 5) {
+            onAlert({ type: "temp_spike", message: "Temperature spike detected", icon: undefined })
+          }
+          if (latest.wind_speed > prev.wind_speed + 10) {
+            onAlert({ type: "wind_gust", message: "Strong wind gust detected", icon: undefined })
+          }
         }
         prev = latest
       }
-    } catch {}
+    } catch (error) {
+      console.error('Weather polling error:', error)
+    }
   }
+  
   poll()
   const interval = setInterval(poll, intervalMs)
   return () => clearInterval(interval)
@@ -539,13 +824,14 @@ export async function pollWeatherForAlerts(
 
 // Estimate weather impact on lap times (simple heuristic)
 export async function estimateWeatherImpact(sessionKey: string): Promise<import("@/lib/api/types").WeatherImpactEstimate | null> {
-  const openf1 = new OpenF1Service("https://api.openf1.org/v1")
+  const openf1 = createOpenF1Service()
   try {
     const [weatherArr, laps] = await Promise.all([
       openf1.getWeather(sessionKey),
       openf1.getLapInfo(sessionKey),
     ])
     if (!Array.isArray(weatherArr) || weatherArr.length === 0 || !laps || !laps.sectorTimes) return null
+    
     const weather = weatherArr[weatherArr.length - 1]
     // Simple: compare average lap time in dry vs. wet, hot vs. cool, windy vs. calm
     const lapTimes = laps.sectorTimes.map((s: { time: number }) => s.time)

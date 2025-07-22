@@ -92,14 +92,16 @@ function WeatherOverlay({
   useEffect(() => {
     if (!weatherData && !telemetryState.weather) {
       // Fetch weather data if not provided and not already in context
-      const openf1 = new OpenF1Service("https://api.openf1.org/v1");
+      const openf1 = new OpenF1Service(); // Now reads from env automatically
       openf1.getWeather("latest")
         .then(data => {
           if (Array.isArray(data) && data.length > 0) {
-            updateWeather(data[data.length - 1]); // Use updateWeather instead of setWeather
+            updateWeather(data[data.length - 1]);
           }
         })
-        .catch(console.error);
+        .catch(err => {
+          console.error('Failed to fetch weather data:', err);
+        });
     }
   }, [weatherData, telemetryState.weather, updateWeather]);
 

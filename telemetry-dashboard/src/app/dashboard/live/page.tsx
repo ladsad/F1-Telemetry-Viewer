@@ -59,6 +59,15 @@ interface LiveDriverData extends OpenF1CarData {
   lap_number: number
   driver_number: number
   date: string
+
+  // Telemetry fields
+  speed?: number
+  throttle?: number
+  brake?: number
+  gear?: number
+  rpm?: number
+  drs?: boolean
+  timestamp?: number
   
   // Additional live data fields
   position?: number

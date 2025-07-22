@@ -1,13 +1,13 @@
 import { useTelemetry } from "@/context/TelemetryDataContext";
 import { useMemo, useCallback } from "react";
-import { TelemetryDataPoint } from "@/lib/types";
+import { OpenF1CarData } from "@/lib/api/types";
 
 /**
  * Specialized hook that provides telemetry data for specific components
  * while optimizing renders and adding derived calculations
  */
 export function useTelemetryData(metricType: 'car' | 'track' | 'driver' | 'weather' = 'car') {
-  const { telemetryState, connectionStatus, telemetryHistory } = useTelemetry();
+  const { telemetryState, connectionStatus } = useTelemetry();
   
   // Use useMemo to prevent unnecessary recalculations when other parts of state change
   const currentData = useMemo(() => {
@@ -29,86 +29,74 @@ export function useTelemetryData(metricType: 'car' | 'track' | 'driver' | 'weath
           driverStatus: telemetryState.driverStatus,
           raceProgress: telemetryState.raceProgress
         };
-      case 'weather':
+      case 'weather': {
+        const weather = telemetryState.weather;
         return {
-          weather: telemetryState.weather,
+          weather,
           // Add derived weather calculations
-          conditions: telemetryState.weather ? {
-            isTyreCritical: telemetryState.weather.track_temperature > 45 || telemetryState.weather.track_temperature < 15,
-            isRaining: (telemetryState.weather.rainfall || 0) > 0.5,
-            windEffect: telemetryState.weather.wind_speed > 20 ? 'strong' : 
-                      telemetryState.weather.wind_speed > 10 ? 'moderate' : 'light'
+          conditions: weather ? {
+            isTyreCritical: (weather.track_temperature ?? 0) > 45 || 
+                           (weather.track_temperature ?? 0) < 15,
+            isRaining: (weather.rainfall ?? 0) > 0.5,
+            windEffect: (weather.wind_speed ?? 0) > 20 ? 'strong' : 
+                       (weather.wind_speed ?? 0) > 10 ? 'moderate' : 'light'
           } : null
         };
+      }
       default:
         return telemetryState;
     }
   }, [telemetryState, connectionStatus, metricType]);
 
-  // Efficient query methods for historical data
-  const getRecentHistory = useCallback((seconds: number = 10): TelemetryDataPoint[] => {
-    if (!telemetryHistory || !telemetryHistory.indexedData.length) return [];
-    
-    const now = Date.now();
-    const cutoffTime = now - (seconds * 1000);
-    
-    // Use binary search to find closest index
-    const { point, index } = telemetryHistory.findByTimestamp(cutoffTime);
-    if (index === -1) return [];
-    
-    // Return slice from index to end (most recent data)
-    return telemetryHistory.indexedData.slice(index);
-  }, [telemetryHistory]);
+  // Simple current data accessor since we don't have historical data
+  const getCurrentData = useCallback(() => {
+    return telemetryState.carData;
+  }, [telemetryState.carData]);
 
-  // Get metric statistics for specific duration
-  const getMetricStatistics = useCallback((metric: keyof TelemetryDataPoint, seconds: number = 30) => {
-    const recentData = getRecentHistory(seconds);
-    if (!recentData.length) return null;
+  // Get basic statistics from current data using the correct type
+  const getCurrentStatistics = useCallback((metric: string) => {
+    const carData = telemetryState.carData as any;
+    const currentValue = carData?.[metric];
     
-    const values = recentData.map(point => point[metric]);
-    const numericValues = values.filter(v => typeof v === 'number') as number[];
-    
-    if (!numericValues.length) return null;
-    
-    return {
-      min: Math.min(...numericValues),
-      max: Math.max(...numericValues),
-      avg: numericValues.reduce((sum, val) => sum + val, 0) / numericValues.length,
-      current: recentData[recentData.length - 1][metric],
-      trend: calculateTrend(numericValues)
-    };
-  }, [getRecentHistory]);
-
-  // Calculate trend direction
-  function calculateTrend(values: number[]): 'up' | 'down' | 'stable' {
-    if (values.length < 5) return 'stable';
-    
-    // Use linear regression slope to determine trend
-    const n = Math.min(values.length, 10); // Use last 10 points
-    const recentValues = values.slice(-n);
-    
-    let sumX = 0;
-    let sumY = 0;
-    let sumXY = 0;
-    let sumXX = 0;
-    
-    for (let i = 0; i < n; i++) {
-      sumX += i;
-      sumY += recentValues[i];
-      sumXY += i * recentValues[i];
-      sumXX += i * i;
+    if (currentValue === undefined || typeof currentValue !== 'number') {
+      return null;
     }
     
-    const slope = (n * sumXY - sumX * sumY) / (n * sumXX - sumX * sumX);
+    return {
+      current: currentValue,
+      // Since we don't have historical data, we can't calculate min/max/avg/trend
+      min: currentValue,
+      max: currentValue,
+      avg: currentValue,
+      trend: 'stable' as const
+    };
+  }, [telemetryState.carData]);
+
+  // Add a more type-safe version that works with known TelemetryData properties
+  const getTelemetryStatistics = useCallback((metric: 'speed' | 'throttle' | 'brake' | 'gear' | 'rpm' | 'drs') => {
+    if (!telemetryState.carData) {
+      return null;
+    }
+
+    const currentValue = telemetryState.carData[metric];
     
-    if (slope > 0.1) return 'up';
-    if (slope < -0.1) return 'down';
-    return 'stable';
-  }
+    if (currentValue === undefined || typeof currentValue !== 'number') {
+      return null;
+    }
+    
+    return {
+      current: currentValue,
+      min: currentValue,
+      max: currentValue,
+      avg: currentValue,
+      trend: 'stable' as const
+    };
+  }, [telemetryState.carData]);
 
   return {
     ...currentData,
-    getRecentHistory,
-    getMetricStatistics
+    getCurrentData,
+    getCurrentStatistics,
+    getTelemetryStatistics
   };
 }

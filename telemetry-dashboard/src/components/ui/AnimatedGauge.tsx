@@ -63,11 +63,11 @@ export default function AnimatedGauge({
   const circumference = 2 * Math.PI * radius
 
   // Calculate angles for semicircle style
-  const issemicircle = style === "semicircle"
-  const startAngle = issemicircle ? -90 : -90
-  const endAngle = issemicircle ? 90 : 270
+  const isSemicircle = style === "semicircle"
+  const startAngle = isSemicircle ? -90 : -90
+  const endAngle = isSemicircle ? 90 : 270
   const totalAngle = endAngle - startAngle
-  const arcLength = issemicircle ? circumference / 2 : circumference
+  const arcLength = isSemicircle ? circumference / 2 : circumference
 
   // Animated value with spring physics
   const animatedValue = useSpring(0, {
@@ -144,8 +144,8 @@ export default function AnimatedGauge({
       <div className="relative">
         <svg
           width={viewBoxSize}
-          height={issemicircle ? viewBoxSize / 2 + 30 : viewBoxSize}
-          viewBox={`0 0 ${viewBoxSize} ${issemicircle ? viewBoxSize / 2 + 30 : viewBoxSize}`}
+          height={isSemicircle ? viewBoxSize / 2 + 30 : viewBoxSize}
+          viewBox={`0 0 ${viewBoxSize} ${isSemicircle ? viewBoxSize / 2 + 30 : viewBoxSize}`}
           className="transform -rotate-90"
         >
           <defs>
@@ -166,7 +166,7 @@ export default function AnimatedGauge({
           </defs>
 
           {/* Background track */}
-          {issemicircle ? (
+          {isSemicircle ? (
             <path
               d={createArcPath(startAngle, endAngle, radius)}
               fill="none"
@@ -191,7 +191,7 @@ export default function AnimatedGauge({
             const segmentStart = ((segment.min - min) / (max - min)) * totalAngle + startAngle
             const segmentEnd = ((segment.max - min) / (max - min)) * totalAngle + startAngle
             
-            if (issemicircle) {
+            if (isSemicircle) {
               return (
                 <path
                   key={`segment-bg-${index}`}
@@ -219,14 +219,13 @@ export default function AnimatedGauge({
                   strokeDasharray={`${segmentCircumference} ${circumference}`}
                   strokeDashoffset={-segmentOffset}
                   transform="rotate(-90)"
-                  transformOrigin={`${center} ${center}`}
                 />
               )
             }
           })}
 
           {/* Animated progress arc/circle */}
-          {issemicircle ? (
+          {isSemicircle ? (
             <motion.path
               d={createArcPath(startAngle, endAngle, radius)}
               fill="none"
@@ -236,7 +235,9 @@ export default function AnimatedGauge({
               transform={`translate(${center}, ${center})`}
               filter={`url(#gauge-glow-${label})`}
               strokeDasharray={arcLength}
-              strokeDashoffset={useTransform(progress, [0, 1], [arcLength, 0])}
+              style={{
+                strokeDashoffset: useTransform(progress, [0, 1], [arcLength, 0])
+              }}
               initial={{ strokeDashoffset: arcLength }}
             />
           ) : (
@@ -250,7 +251,9 @@ export default function AnimatedGauge({
               strokeLinecap="round"
               filter={`url(#gauge-glow-${label})`}
               strokeDasharray={circumference}
-              strokeDashoffset={useTransform(progress, [0, 1], [circumference, 0])}
+              style={{
+                strokeDashoffset: useTransform(progress, [0, 1], [circumference, 0])
+              }}
               initial={{ strokeDashoffset: circumference }}
             />
           )}
@@ -295,9 +298,16 @@ export default function AnimatedGauge({
             strokeLinecap="round"
             initial={{ rotate: startAngle }}
             animate={{ 
-              rotate: useTransform(progress, [0, 1], [startAngle, endAngle])
+              rotate: startAngle + ((Math.min(Math.max(value, min), max) - min) / (max - min)) * totalAngle
             }}
-            transformOrigin={`${center}px ${center}px`}
+            transition={{ 
+              duration: animationDuration, 
+              ease: "easeOut",
+              type: "spring",
+              damping: 20,
+              stiffness: 100
+            }}
+            transform={`rotate(0 ${center} ${center})`}
             filter={`url(#gauge-glow-${label})`}
           />
 
@@ -356,7 +366,7 @@ export default function AnimatedGauge({
       )}
 
       {/* Min/Max labels for semicircle */}
-      {issemicircle && showLabels && (
+      {isSemicircle && showLabels && (
         <div className="flex justify-between w-full mt-1 px-2">
           <span style={{ fontSize: labelSize - 2 }} className="text-muted-foreground">
             {min}

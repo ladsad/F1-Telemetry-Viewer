@@ -32,7 +32,7 @@ export function useComponentLoader(
     retryCount: 0
   })
 
-  const timeoutRef = useRef<NodeJS.Timeout>()
+  const timeoutRef = useRef<NodeJS.Timeout | null>(null)
 
   const loadComponent = useCallback(async () => {
     setState(prev => ({ ...prev, isLoading: true, error: null }))
@@ -73,6 +73,7 @@ export function useComponentLoader(
   const retry = useCallback(() => {
     if (timeoutRef.current) {
       clearTimeout(timeoutRef.current)
+      timeoutRef.current = null
     }
     setState(prev => ({ ...prev, retryCount: 0 }))
     loadComponent()
@@ -81,6 +82,7 @@ export function useComponentLoader(
   const reset = useCallback(() => {
     if (timeoutRef.current) {
       clearTimeout(timeoutRef.current)
+      timeoutRef.current = null
     }
     setState({
       isLoading: false,

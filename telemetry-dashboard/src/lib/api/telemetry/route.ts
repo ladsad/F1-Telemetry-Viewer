@@ -34,7 +34,7 @@ export async function GET(req: NextRequest) {
     }
 
     // Fetch telemetry data
-    const data: OpenF1CarData[] = await openf1.getCarTelemetry(
+    const data = await openf1.getCarTelemetry(
       sessionKey,
       lapNumber ? Number(lapNumber) : undefined,
       driverNumber ? Number(driverNumber) : undefined
@@ -68,21 +68,43 @@ export async function GET(req: NextRequest) {
       }
     }
 
-    // Transform data to ensure consistency
-    const transformedData = processedData.map(item => ({
-      speed: item.speed || 0,
-      throttle: item.throttle || 0,
-      brake: item.brake || 0,
-      gear: item.gear || 0,
-      rpm: item.rpm || 0,
-      drs: item.drs || false,
-      timestamp: item.timestamp || Date.now(),
-      session_key: item.session_key || sessionKey,
-      driver_number: item.driver_number || (driverNumber ? Number(driverNumber) : null),
-      lap_number: item.lap_number || (lapNumber ? Number(lapNumber) : null),
-      // Include original data
-      ...item
-    }))
+    // Transform data to ensure consistency and add missing properties
+    const transformedData: OpenF1CarData[] = processedData.map(item => {
+      // Destructure all properties that we'll explicitly set to avoid conflicts
+      const {
+        session_key: itemSessionKey,
+        driver_number: itemDriverNumber,
+        lap_number: itemLapNumber,
+        timestamp: itemTimestamp,
+        speed,
+        throttle,
+        brake,
+        gear,
+        rpm,
+        drs,
+        ...restProperties
+      } = item
+
+      return {
+        // Required properties for OpenF1CarData with fallbacks
+        session_key: itemSessionKey || sessionKey,
+        driver_number: itemDriverNumber || (driverNumber ? Number(driverNumber) : 0),
+        date: new Date().toISOString(), // Always generate a new date since it's not in source data
+        lap_number: itemLapNumber || (lapNumber ? Number(lapNumber) : 1),
+        timestamp: itemTimestamp || Date.now(),
+        
+        // Telemetry properties with defaults
+        speed: speed || 0,
+        throttle: throttle || 0,
+        brake: brake || 0,
+        gear: gear || 0,
+        rpm: rpm || 0,
+        drs: drs || false,
+        
+        // Include any additional properties that don't conflict
+        ...restProperties
+      }
+    })
 
     // Calculate response metadata
     const responseMetadata = {

@@ -2,7 +2,6 @@ import * as React from "react"
 import * as SliderPrimitive from "@radix-ui/react-slider"
 
 import { cn } from "@/lib/utils"
-import { useTheme } from "@/components/ThemeProvider"
 
 const Slider = React.forwardRef<
   React.ElementRef<typeof SliderPrimitive.Root>,
@@ -23,21 +22,5 @@ const Slider = React.forwardRef<
   </SliderPrimitive.Root>
 ))
 Slider.displayName = SliderPrimitive.Root.displayName
-
-export function Card({ children, ...props }) {
-  const { colors } = useTheme()
-  return (
-    <div
-      {...props}
-      style={{
-        background: colors.primary + "10",
-        borderColor: colors.primary,
-      }}
-      className="rounded border"
-    >
-      {children}
-    </div>
-  )
-}
 
 export { Slider }

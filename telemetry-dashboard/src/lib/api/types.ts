@@ -2,15 +2,16 @@
 export interface OpenF1CarData {
   session_key: string
   driver_number: number
-  lap_number: number
-  date: string // ISO timestamp
-  speed: number
-  throttle: number
-  brake: number
-  gear: number
-  drs: boolean
-  rpm: number
-  // Add more fields as needed from OpenF1 docs
+  date: string
+  lap_number?: number
+  timestamp?: number  // Add this property
+  speed?: number
+  throttle?: number
+  brake?: number
+  gear?: number
+  rpm?: number
+  drs?: boolean
+  // ... other properties
 }
 
 // Weather data (weather_data)
@@ -60,7 +61,7 @@ export interface OpenF1SectorTiming {
   driver_number: number
   sector: number // 1, 2, or 3
   sector_time: number // seconds
-  performance: "fastest" | "personal_best" | "slow" // for color-coding
+  performance: "fastest" | "personal_best" | "slow" | "normal" // Add "normal" to the allowed values
   // Optionally, sector start/end positions (normalized 0-1)
   start_x?: number
   start_y?: number

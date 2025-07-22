@@ -8,7 +8,7 @@ type ThemeMode = "dark" | "light" | "auto"
 type ThemeContextType = {
   team: TeamKey
   setTeam: (team: TeamKey) => void
-  colors: typeof TEAM_COLORS[TeamKey]
+  colors: { primary: string; accent: string }
   mode: ThemeMode
   setMode: (mode: ThemeMode) => void
   actualMode: "dark" | "light" // The resolved mode (for auto mode)
@@ -31,7 +31,7 @@ type ThemeContextType = {
 const ThemeContext = createContext<ThemeContextType>({
   team: "ferrari",
   setTeam: () => {},
-  colors: TEAM_COLORS.ferrari,
+  colors: { primary: "#dc0000", accent: "#fff" },
   mode: "dark",
   setMode: () => {},
   actualMode: "dark",
@@ -62,7 +62,8 @@ const TEAM_GRADIENTS: Record<TeamKey, string> = {
 }
 
 // High contrast variants for accessibility
-const HIGH_CONTRAST_COLORS: Record<TeamKey, typeof TEAM_COLORS[TeamKey]> = {
+type HighContrastColor = { primary: string; accent: string }
+const HIGH_CONTRAST_COLORS: Record<TeamKey, HighContrastColor> = {
   ferrari: { primary: "#ff0000", accent: "#ffffff" },
   mercedes: { primary: "#00ffff", accent: "#000000" },
   redbull: { primary: "#0066ff", accent: "#ffffff" },

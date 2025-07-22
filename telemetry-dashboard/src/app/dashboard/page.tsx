@@ -15,7 +15,7 @@ import { Button } from "@/components/ui/button"
 import { ChevronDown, ChevronUp, Settings, BarChart3, Map, CloudSun, User } from "lucide-react"
 import { motion, AnimatePresence } from "framer-motion"
 
-// Enhanced dynamic imports with loading states and error boundaries
+// Route-specific dynamic imports with independent loading
 const TelemetryDisplay = dynamic(() => import("@/components/TelemetryDisplay"), {
   loading: () => <TelemetryLoadingSkeleton />,
   ssr: false
@@ -36,13 +36,9 @@ const DriverPanel = dynamic(() => import("@/components/DriverPanel"), {
   ssr: false
 })
 
+// Analytics components - only loaded when analytics section is expanded
 const LapTimeComparisonChart = dynamic(() => import("@/components/LapTimeComparisonChart"), {
   loading: () => <ChartLoadingSkeleton title="Lap Time Comparison" />,
-  ssr: false
-})
-
-const TelemetryTable = dynamic(() => import("@/components/TelemetryTable"), {
-  loading: () => <TableLoadingSkeleton />,
   ssr: false
 })
 
@@ -51,22 +47,18 @@ const PerformanceAnalyticsDashboard = dynamic(() => import("@/components/Perform
   ssr: false
 })
 
+// Advanced components - only loaded when advanced section is expanded
+const TelemetryTable = dynamic(() => import("@/components/TelemetryTable"), {
+  loading: () => <TableLoadingSkeleton />,
+  ssr: false
+})
+
 const TireStrategyChart = dynamic(() => import("@/components/TireStrategyChart"), {
   loading: () => <ChartLoadingSkeleton title="Tire Strategy" />,
   ssr: false
 })
 
-const DeltaTimeChart = dynamic(() => import("@/components/DeltaTimeChart"), {
-  loading: () => <ChartLoadingSkeleton title="Delta Time Analysis" />,
-  ssr: false
-})
-
-const SessionDetailDialog = dynamic(() => import("@/components/SessionDetailDialog"), {
-  loading: () => <div className="w-full h-96 bg-muted animate-pulse rounded" />,
-  ssr: false
-})
-
-// Enhanced loading skeletons with better UX
+// Enhanced loading skeletons
 function TelemetryLoadingSkeleton() {
   return (
     <Card className="p-6">
@@ -132,10 +124,6 @@ function WeatherLoadingSkeleton() {
               <div className="h-6 w-16 bg-muted rounded animate-pulse" />
             </div>
           ))}
-        </div>
-        <div className="space-y-2">
-          <div className="h-4 w-24 bg-muted rounded animate-pulse" />
-          <div className="h-2 w-full bg-muted rounded animate-pulse" />
         </div>
       </div>
     </Card>
@@ -241,41 +229,7 @@ function AnalyticsLoadingSkeleton() {
   )
 }
 
-// Dashboard error boundary
-function DashboardErrorBoundary({ children, fallback }: { 
-  children: React.ReactNode; 
-  fallback: React.ReactNode 
-}) {
-  const [hasError, setHasError] = useState(false)
-
-  useEffect(() => {
-    const handleError = () => setHasError(true)
-    window.addEventListener('error', handleError)
-    return () => window.removeEventListener('error', handleError)
-  }, [])
-
-  if (hasError) {
-    return (
-      <Card className="p-6">
-        <div className="text-center space-y-4">
-          <div className="text-destructive text-lg font-semibold">
-            Something went wrong
-          </div>
-          <p className="text-muted-foreground">
-            This component failed to load. Please try refreshing the page.
-          </p>
-          <Button onClick={() => setHasError(false)} variant="outline">
-            Try Again
-          </Button>
-        </div>
-      </Card>
-    )
-  }
-
-  return <>{children}</>
-}
-
-// Enhanced dashboard component with progressive loading
+// Dashboard content with progressive loading
 function DashboardContent({ weather, sessionKey, driverNumber, driverNumbers }: {
   weather: OpenF1WeatherData | null;
   sessionKey: string;
@@ -331,33 +285,25 @@ function DashboardContent({ weather, sessionKey, driverNumber, driverNumbers }: 
             >
               <div className="grid grid-cols-1 gap-4">
                 {/* Primary Telemetry Display */}
-                <DashboardErrorBoundary fallback={<TelemetryLoadingSkeleton />}>
-                  <Suspense fallback={<TelemetryLoadingSkeleton />}>
-                    <TelemetryDisplay fallbackApiUrl="/api/telemetry/latest" />
-                  </Suspense>
-                </DashboardErrorBoundary>
+                <Suspense fallback={<TelemetryLoadingSkeleton />}>
+                  <TelemetryDisplay fallbackApiUrl="/api/telemetry/latest" />
+                </Suspense>
 
                 {/* Track and Driver Information */}
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                  <DashboardErrorBoundary fallback={<MapLoadingSkeleton />}>
-                    <Suspense fallback={<MapLoadingSkeleton />}>
-                      <TrackMap />
-                    </Suspense>
-                  </DashboardErrorBoundary>
+                  <Suspense fallback={<MapLoadingSkeleton />}>
+                    <TrackMap />
+                  </Suspense>
 
-                  <DashboardErrorBoundary fallback={<DriverLoadingSkeleton />}>
-                    <Suspense fallback={<DriverLoadingSkeleton />}>
-                      <DriverPanel />
-                    </Suspense>
-                  </DashboardErrorBoundary>
+                  <Suspense fallback={<DriverLoadingSkeleton />}>
+                    <DriverPanel />
+                  </Suspense>
                 </div>
 
                 {/* Weather Information */}
-                <DashboardErrorBoundary fallback={<WeatherLoadingSkeleton />}>
-                  <Suspense fallback={<WeatherLoadingSkeleton />}>
-                    <WeatherOverlay />
-                  </Suspense>
-                </DashboardErrorBoundary>
+                <Suspense fallback={<WeatherLoadingSkeleton />}>
+                  <WeatherOverlay />
+                </Suspense>
               </div>
             </motion.div>
           )}
@@ -393,22 +339,18 @@ function DashboardContent({ weather, sessionKey, driverNumber, driverNumbers }: 
             >
               {analyticsInView && (
                 <div className="space-y-4">
-                  <DashboardErrorBoundary fallback={<ChartLoadingSkeleton title="Lap Time Comparison" />}>
-                    <Suspense fallback={<ChartLoadingSkeleton title="Lap Time Comparison" />}>
-                      <LapTimeComparisonChart
-                        sessionKey={sessionKey}
-                        driverNumbers={driverNumbers}
-                      />
-                    </Suspense>
-                  </DashboardErrorBoundary>
+                  <Suspense fallback={<ChartLoadingSkeleton title="Lap Time Comparison" />}>
+                    <LapTimeComparisonChart
+                      sessionKey={sessionKey}
+                      driverNumbers={driverNumbers}
+                    />
+                  </Suspense>
 
-                  <DashboardErrorBoundary fallback={<AnalyticsLoadingSkeleton />}>
-                    <Suspense fallback={<AnalyticsLoadingSkeleton />}>
-                      <PerformanceAnalyticsDashboard 
-                        sessionKey={sessionKey}
-                      />
-                    </Suspense>
-                  </DashboardErrorBoundary>
+                  <Suspense fallback={<AnalyticsLoadingSkeleton />}>
+                    <PerformanceAnalyticsDashboard 
+                      sessionKey={sessionKey}
+                    />
+                  </Suspense>
                 </div>
               )}
             </motion.div>
@@ -445,30 +387,26 @@ function DashboardContent({ weather, sessionKey, driverNumber, driverNumbers }: 
             >
               {advancedInView && (
                 <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
-                  <DashboardErrorBoundary fallback={<TableLoadingSkeleton />}>
-                    <Suspense fallback={<TableLoadingSkeleton />}>
-                      <TelemetryTable
-                        title="Real-time Data Stream"
-                        maxHeight={400}
-                        virtualScrollOptions={{
-                          itemSize: 35,
-                          overscanCount: 5,
-                          useVariableSize: false,
-                          enableSelection: true,
-                          enableFiltering: true
-                        }}
-                      />
-                    </Suspense>
-                  </DashboardErrorBoundary>
+                  <Suspense fallback={<TableLoadingSkeleton />}>
+                    <TelemetryTable
+                      title="Real-time Data Stream"
+                      maxHeight={400}
+                      virtualScrollOptions={{
+                        itemSize: 35,
+                        overscanCount: 5,
+                        useVariableSize: false,
+                        enableSelection: true,
+                        enableFiltering: true
+                      }}
+                    />
+                  </Suspense>
 
-                  <DashboardErrorBoundary fallback={<ChartLoadingSkeleton title="Tire Strategy" />}>
-                    <Suspense fallback={<ChartLoadingSkeleton title="Tire Strategy" />}>
-                      <TireStrategyChart
-                        sessionKey={sessionKey}
-                        driverNumber={driverNumber}
-                      />
-                    </Suspense>
-                  </DashboardErrorBoundary>
+                  <Suspense fallback={<ChartLoadingSkeleton title="Tire Strategy" />}>
+                    <TireStrategyChart
+                      sessionKey={sessionKey}
+                      driverNumber={driverNumber}
+                    />
+                  </Suspense>
                 </div>
               )}
             </motion.div>
@@ -480,7 +418,7 @@ function DashboardContent({ weather, sessionKey, driverNumber, driverNumbers }: 
 }
 
 // Main dashboard page component
-export default function LiveDashboardPage() {
+export default function MainDashboardPage() {
   const [weather, setWeather] = useState<OpenF1WeatherData | null>(null)
   const [isInitialLoading, setIsInitialLoading] = useState(true)
   const sessionKey = "latest"

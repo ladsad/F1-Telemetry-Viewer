@@ -6,7 +6,6 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Gauge, Zap, Activity, Settings, TrendingUp, RefreshCw, AlertCircle } from "lucide-react";
 import { motion, AnimatePresence } from "framer-motion";
 import { useTheme } from "@/components/ThemeProvider";
-import { SpeedometerIcon, ERSIcon } from "@/components/Icons";
 import AnimatedButton from "@/components/AnimatedButton";
 import { useWebSocket } from "@/lib/hooks/useWebSocket";
 import { useTelemetry } from "@/context/TelemetryDataContext";
@@ -16,16 +15,34 @@ import { OpenF1Service } from "@/lib/api/openf1"; // Add this import
 
 const TELEMETRY_CACHE_KEY = "telemetry_last_data";
 
-// Lazy load heavy chart dependencies
-const AnimatedGauge = dynamic(() => import("@/components/ui/AnimatedGauge"), {
+// Lazy load heavy gauge components
+const AnimatedGauge = dynamic(() => import("@/components/ui/AnimatedGauge").catch(() => ({ 
+  default: () => <div className="w-16 h-16 bg-muted animate-pulse rounded-full" />
+})), {
   loading: () => <div className="w-16 h-16 bg-muted animate-pulse rounded-full" />,
   ssr: false
-});
+})
 
-const SpeedometerIcon = dynamic(() => import("@/components/Icons").then(mod => ({ default: mod.SpeedometerIcon })), {
-  loading: () => <div className="w-6 h-6 bg-muted animate-pulse rounded" />,
-  ssr: false
-});
+// Lazy load icons
+const SpeedometerIcon = dynamic(() => 
+  import("@/components/Icons").then(mod => ({ default: mod.SpeedometerIcon })).catch(() => ({ 
+    default: () => <div className="w-6 h-6 bg-muted animate-pulse rounded" />
+  })), 
+  {
+    loading: () => <div className="w-6 h-6 bg-muted animate-pulse rounded" />,
+    ssr: false
+  }
+)
+
+const ERSIcon = dynamic(() => 
+  import("@/components/Icons").then(mod => ({ default: mod.ERSIcon })).catch(() => ({ 
+    default: () => <div className="w-6 h-6 bg-muted animate-pulse rounded" />
+  })), 
+  {
+    loading: () => <div className="w-6 h-6 bg-muted animate-pulse rounded" />,
+    ssr: false
+  }
+)
 
 // Cache utility functions
 function saveTelemetryToCache(data: TelemetryData) {

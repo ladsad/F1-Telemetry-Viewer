@@ -4,7 +4,6 @@ import React, { useEffect, useState, useRef, useCallback, useMemo } from "react"
 import dynamic from "next/dynamic";
 import { Card, CardHeader, CardTitle, CardContent } from "@/components/ui/card";
 import { OpenF1Service } from "@/lib/api/openf1";
-import { Line, XAxis, YAxis, Tooltip, Legend, ReferenceLine } from "recharts";
 import { useTheme } from "@/components/ThemeProvider";
 import { Clock, ArrowUpDown, Download, AlertTriangle, Filter, Zap, Eye, EyeOff } from "lucide-react";
 import { motion, AnimatePresence } from "framer-motion";
@@ -20,22 +19,68 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Checkbox } from "@/components/ui/checkbox";
 import { Badge } from "@/components/ui/badge";
 
-// Lazy load chart library
+// Lazy load chart dependencies
 const ResponsiveContainer = dynamic(() => 
   import("recharts").then(mod => ({ default: mod.ResponsiveContainer })), 
-  { ssr: false }
-);
+  { 
+    ssr: false,
+    loading: () => <div className="w-full h-full bg-muted animate-pulse rounded" />
+  }
+)
 
 const LineChart = dynamic(() => 
   import("recharts").then(mod => ({ default: mod.LineChart })), 
   { ssr: false }
-);
+)
+
+const XAxis = dynamic(() => 
+  import("recharts").then(mod => ({ default: mod.XAxis })), 
+  { ssr: false }
+)
+
+const YAxis = dynamic(() => 
+  import("recharts").then(mod => ({ default: mod.YAxis })), 
+  { ssr: false }
+)
+
+const Tooltip = dynamic(() => 
+  import("recharts").then(mod => ({ default: mod.Tooltip })), 
+  { ssr: false }
+)
+
+const Legend = dynamic(() => 
+  import("recharts").then(mod => ({ default: mod.Legend })), 
+  { ssr: false }
+)
+
+const Line = dynamic(() => 
+  import("recharts").then(mod => ({ default: mod.Line })), 
+  { ssr: false }
+)
+
+const ReferenceLine = dynamic(() => 
+  import("recharts").then(mod => ({ default: mod.ReferenceLine })), 
+  { ssr: false }
+)
 
 // Lazy load virtualization
 const VariableSizeList = dynamic(() => 
   import("react-window").then(mod => ({ default: mod.VariableSizeList })), 
+  { 
+    ssr: false,
+    loading: () => <div className="w-full h-64 bg-muted animate-pulse rounded" />
+  }
+)
+
+const FixedSizeList = dynamic(() => 
+  import("react-window").then(mod => ({ default: mod.FixedSizeList })), 
   { ssr: false }
-);
+)
+
+const AutoSizer = dynamic(() => import("react-virtualized-auto-sizer"), {
+  ssr: false,
+  loading: () => <div className="w-full h-full bg-muted animate-pulse rounded" />
+})
 
 // Enhanced types for virtualization
 interface VirtualizedSeries {

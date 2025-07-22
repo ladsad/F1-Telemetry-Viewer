@@ -2,8 +2,7 @@
 
 import { useState, useCallback, useMemo, useRef, useEffect } from 'react';
 import { Card, CardHeader, CardTitle, CardContent } from "@/components/ui/card";
-import { VariableSizeList as List, FixedSizeList as FixedList, ListChildComponentProps } from 'react-window';
-import AutoSizer from 'react-virtualized-auto-sizer';
+import dynamic from "next/dynamic";
 import { useTelemetry } from "@/context/TelemetryDataContext";
 import { Loader2, ArrowUpDown, Download, Search, Filter } from "lucide-react";
 import { Input } from "@/components/ui/input";
@@ -160,6 +159,28 @@ const TableHeader = ({
     ))}
   </div>
 );
+
+// Lazy load virtualization components
+const VariableSizeList = dynamic(() => 
+  import("react-window").then(mod => ({ default: mod.VariableSizeList })), 
+  { 
+    ssr: false,
+    loading: () => <div className="w-full h-64 bg-muted animate-pulse rounded" />
+  }
+)
+
+const FixedSizeList = dynamic(() => 
+  import("react-window").then(mod => ({ default: mod.FixedSizeList })), 
+  { 
+    ssr: false,
+    loading: () => <div className="w-full h-64 bg-muted animate-pulse rounded" />
+  }
+)
+
+const AutoSizer = dynamic(() => import("react-virtualized-auto-sizer"), {
+  ssr: false,
+  loading: () => <div className="w-full h-full bg-muted animate-pulse rounded" />
+})
 
 // Main component with enhanced virtualization
 export default function TelemetryTable({

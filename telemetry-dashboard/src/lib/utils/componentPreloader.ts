@@ -39,6 +39,45 @@ class ComponentPreloader {
     }, 5000)
   }
 
+  preloadRouteComponents(route: string) {
+    switch (route) {
+      case '/dashboard':
+        this.preloadDashboardComponents()
+        break
+      case '/dashboard/live':
+        this.preloadLiveComponents()
+        break
+      case '/dashboard/analytics':
+        this.preloadAnalyticsComponents()
+        break
+      case '/dashboard/settings':
+        this.preloadSettingsComponents()
+        break
+    }
+  }
+
+  private preloadLiveComponents() {
+    // Critical for live dashboard
+    this.preloadComponent('TelemetryDisplay', () => import('@/components/TelemetryDisplay'))
+    this.preloadComponent('TrackMap', () => import('@/components/TrackMap'))
+    this.preloadComponent('DriverPanel', () => import('@/components/DriverPanel'))
+    this.preloadComponent('WeatherOverlay', () => import('@/components/WeatherOverlay'))
+  }
+
+  private preloadAnalyticsComponents() {
+    // Analytics-specific components
+    this.preloadComponent('PerformanceAnalytics', () => import('@/components/PerformanceAnalyticsDashboard'))
+    this.preloadComponent('LapTimeChart', () => import('@/components/LapTimeComparisonChart'))
+    this.preloadComponent('DeltaTimeChart', () => import('@/components/DeltaTimeChart'))
+    this.preloadComponent('TireStrategy', () => import('@/components/TireStrategyChart'))
+  }
+
+  private preloadSettingsComponents() {
+    // Settings components
+    this.preloadComponent('ThemeToggle', () => import('@/components/ThemeToggle'))
+    this.preloadComponent('ConnectionStatus', () => import('@/components/ConnectionStatusIndicator'))
+  }
+
   isPreloaded(name: string): boolean {
     return this.preloadedComponents.has(name)
   }
@@ -51,5 +90,8 @@ if (typeof window !== 'undefined') {
   // Start preloading after page load
   window.addEventListener('load', () => {
     componentPreloader.preloadDashboardComponents()
+
+    const pathname = window.location.pathname
+    componentPreloader.preloadRouteComponents(pathname)
   })
 }

@@ -39,14 +39,15 @@ const initialTelemetryState: TelemetryState = {
 const TelemetryContext = createContext<TelemetryContextType | undefined>(undefined);
 
 // Provider component
-export function TelemetryProvider({ children, initialSessionKey }: { children: React.ReactNode, initialSessionKey?: string }) {
+function TelemetryProvider({ children, initialSessionKey }: { children: React.ReactNode, initialSessionKey?: string }) {
   const [telemetryState, setTelemetryState] = useState<TelemetryState>({
     ...initialTelemetryState,
-    sessionKey: initialSessionKey || "", // Use the prop if provided
+    sessionKey: initialSessionKey || "latest", // Provide default fallback
   });
+  
   const [selectedDriverNumber, setSelectedDriverNumber] = useState<number>(1);
   
-  // Add the missing connection status state
+  // Ensure connection status is properly initialized
   const [connectionStatus, setConnectionStatus] = useState<{
     telemetry: ConnectionStatus;
     positions: ConnectionStatus;
@@ -84,12 +85,26 @@ export function TelemetryProvider({ children, initialSessionKey }: { children: R
     onStatusChange: () => {},
   });
 
-  // Handle car data updates
+  // Update connection status based on WebSocket states
+  useEffect(() => {
+    setConnectionStatus(prev => ({
+      ...prev,
+      telemetry: telemetryStatus || 'closed',
+      positions: positionsStatus || 'closed'
+    }));
+  }, [telemetryStatus, positionsStatus]);
+
+  // Handle car data updates with connection status
   useEffect(() => {
     if (wsCarData) {
       carDataQueue.enqueue(wsCarData);
+      // Update connection status when receiving data
+      setConnectionStatus(prev => ({
+        ...prev,
+        telemetry: 'open'
+      }));
     }
-  }, [wsCarData]);
+  }, [wsCarData, carDataQueue]);
 
   // Update state with processed car data from queue
   useEffect(() => {
@@ -139,29 +154,30 @@ export function TelemetryProvider({ children, initialSessionKey }: { children: R
     // Check status periodically and attempt reconnection for closed connections
     const recoveryInterval = setInterval(() => {
       if (navigator.onLine) {
-        if (connectionStatus.telemetry === 'closed') {
+        // Only attempt reconnection if we were previously connected
+        if (connectionStatus.telemetry === 'closed' && telemetryState.sessionKey) {
           setConnectionStatus(prev => ({
             ...prev,
             telemetry: 'connecting'
-          }))
+          }));
         }
-        if (connectionStatus.positions === 'closed') {
+        if (connectionStatus.positions === 'closed' && telemetryState.sessionKey) {
           setConnectionStatus(prev => ({
             ...prev,
             positions: 'connecting'
-          }))
+          }));
         }
         if (connectionStatus.timing === 'closed') {
           setConnectionStatus(prev => ({
             ...prev,
             timing: 'connecting'
-          }))
+          }));
         }
       }
-    }, 10000) // Try every 10 seconds
+    }, 10000); // Try every 10 seconds
     
-    return () => clearInterval(recoveryInterval)
-  }, [connectionStatus])
+    return () => clearInterval(recoveryInterval);
+  }, [connectionStatus, telemetryState.sessionKey]);
 
   // Method to update entire telemetry state
   const updateTelemetryState = useCallback((update: Partial<TelemetryState>) => {
@@ -255,11 +271,20 @@ export function TelemetryProvider({ children, initialSessionKey }: { children: R
     
     setTelemetryState(prev => {
       try {
+        // Validate data structure
+        const validatedData = newData.filter(point => 
+          point && typeof point === 'object' && 
+          typeof point.timestamp === 'number' && 
+          !isNaN(point.timestamp)
+        );
+        
+        if (validatedData.length === 0) return prev;
+        
         // If history doesn't exist yet, create a new structure
         if (!prev.telemetryHistory) {
           return {
             ...prev,
-            telemetryHistory: createTimeSeriesStore(newData)
+            telemetryHistory: createTimeSeriesStore(validatedData)
           };
         }
         
@@ -269,24 +294,24 @@ export function TelemetryProvider({ children, initialSessionKey }: { children: R
         const updatedTimestamps = [...currentHistory.sortedTimestamps];
         const updatedMap = new Map(currentHistory.timestampMap);
         
-        // Add new data points
-        newData.forEach((point, originalIndex) => {
+        // Add new data points with validation
+        validatedData.forEach((point) => {
           const { timestamp } = point;
           
           // Only add if timestamp doesn't exist
           if (!updatedMap.has(timestamp)) {
             const newIndex = updatedData.length;
             const completePoint: TelemetryDataPoint = {
-              speed: point.speed || 0,
-              throttle: point.throttle || 0,
-              brake: point.brake || 0,
-              gear: point.gear || 0,
-              rpm: point.rpm || 0,
-              drs: !!point.drs,
+              speed: Number(point.speed) || 0,
+              throttle: Number(point.throttle) || 0,
+              brake: Number(point.brake) || 0,
+              gear: Number(point.gear) || 0,
+              rpm: Number(point.rpm) || 0,
+              drs: Boolean(point.drs),
               timestamp: timestamp,
-              lap: point.lap || 1,
-              sector: point.sector || 1,
-              distance: point.distance || 0,
+              lap: Number(point.lap) || 1,
+              sector: Number(point.sector) || 1,
+              distance: Number(point.distance) || 0,
               index: newIndex
             };
             
@@ -297,7 +322,7 @@ export function TelemetryProvider({ children, initialSessionKey }: { children: R
         });
         
         // Resort timestamps if needed
-        if (newData.length > 0) {
+        if (validatedData.length > 0) {
           updatedTimestamps.sort((a, b) => a - b);
         }
         
@@ -482,11 +507,7 @@ export function TelemetryProvider({ children, initialSessionKey }: { children: R
     updateWeather,
     updateRaceProgress,
     updateDriverStatus,
-    connectionStatus: {
-      telemetry: telemetryStatus || 'closed',
-      positions: positionsStatus || 'closed',
-      timing: connectionStatus.timing
-    },
+    connectionStatus, // This should be the full object with telemetry, positions, timing
     setSessionKey,
     selectedDriverNumber,
     setSelectedDriverNumber,
@@ -502,10 +523,10 @@ export function TelemetryProvider({ children, initialSessionKey }: { children: R
 }
 
 // Custom hook to use the telemetry context
-export function useTelemetry(): TelemetryContextType {
+function useTelemetry(): TelemetryContextType {
   const context = useContext(TelemetryContext);
   if (context === undefined) {
-    throw new Error("useTelemetry must be used within a TelemetryProvider");
+    throw new Error("useTelemetry must be used within a TelemetryProvider. Make sure to wrap your component tree with <TelemetryProvider>");
   }
   return context;
 }
@@ -522,3 +543,6 @@ const getPointValue = (point: TelemetryDataPoint, key: string): any => {
   }
   return undefined;
 };
+
+// Make sure this export is present at the end of the file
+export { useTelemetry, TelemetryProvider };

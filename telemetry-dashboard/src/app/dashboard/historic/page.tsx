@@ -8,9 +8,9 @@ import SessionComparison from "@/components/SessionComparison"
 import RaceProgressScrubBar from "@/components/RaceProgressScrubBar"
 import { useHistoricTelemetry } from "@/lib/hooks/useHistoricTelemetry"
 import { useHistoricPlayback } from "@/lib/hooks/useHistoricPlayback"
-import Header from "@/components/Header"
-import Sidebar from "@/components/Sidebar"
-import MobileNav from "@/components/MobileNav"
+import Header from "@/components/layout/Header"
+import Sidebar from "@/components/layout/Sidebar"
+import MobileNav from "@/components/layout/MobileNav"
 
 export default function HistoricViewPage() {
   const [selectedSession, setSelectedSession] = useState<any>(null)

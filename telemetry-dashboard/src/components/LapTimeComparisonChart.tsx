@@ -11,73 +11,56 @@ import AnimatedButton from "@/components/AnimatedButton";
 import ConnectionStatusIndicator from "@/components/ConnectionStatusIndicator";
 import { Loader2 } from "lucide-react";
 import { FixedSizeList as List } from 'react-window';
-import AutoSizer from 'react-virtualized-auto-sizer';
 import { LapTimeComparisonChartProps, OpenF1LapTime } from "@/types";
 import { useTelemetry } from "@/context/TelemetryDataContext";
 import { Input } from "@/components/ui/input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Badge } from "@/components/ui/badge";
+import { ReferenceLine } from "recharts";
 
-// Lazy load chart dependencies
+// Lazy load chart dependencies with correct module paths
+const Legend = dynamic(() => 
+  import("recharts").then(mod => ({ default: mod.Legend as any })), 
+  { ssr: false }
+) as any;
+
 const ResponsiveContainer = dynamic(() => 
-  import("recharts").then(mod => ({ default: mod.ResponsiveContainer })), 
+  import("recharts").then(mod => ({ default: mod.ResponsiveContainer as any })), 
   { 
     ssr: false,
     loading: () => <div className="w-full h-full bg-muted animate-pulse rounded" />
   }
-)
+) as any;
 
 const LineChart = dynamic(() => 
-  import("recharts").then(mod => ({ default: mod.LineChart })), 
+  import("recharts").then(mod => ({ default: mod.LineChart as any })), 
   { ssr: false }
-)
+) as any;
 
 const XAxis = dynamic(() => 
-  import("recharts").then(mod => ({ default: mod.XAxis })), 
+  import("recharts").then(mod => ({ default: mod.XAxis as any })), 
   { ssr: false }
-)
+) as any;
 
 const YAxis = dynamic(() => 
-  import("recharts").then(mod => ({ default: mod.YAxis })), 
+  import("recharts").then(mod => ({ default: mod.YAxis as any })), 
   { ssr: false }
-)
+) as any;
 
 const Tooltip = dynamic(() => 
-  import("recharts").then(mod => ({ default: mod.Tooltip })), 
+  import("recharts").then(mod => ({ default: mod.Tooltip as any })), 
   { ssr: false }
-)
-
-const Legend = dynamic(() => 
-  import("recharts").then(mod => ({ default: mod.Legend })), 
-  { ssr: false }
-)
+) as any;
 
 const Line = dynamic(() => 
-  import("recharts").then(mod => ({ default: mod.Line })), 
+  import("recharts").then(mod => ({ default: mod.Line as any })), 
   { ssr: false }
-)
-
-const ReferenceLine = dynamic(() => 
-  import("recharts").then(mod => ({ default: mod.ReferenceLine })), 
-  { ssr: false }
-)
+) as any;
 
 // Lazy load virtualization
-const VariableSizeList = dynamic(() => 
-  import("react-window").then(mod => ({ default: mod.VariableSizeList })), 
-  { 
-    ssr: false,
-    loading: () => <div className="w-full h-64 bg-muted animate-pulse rounded" />
-  }
-)
-
-const FixedSizeList = dynamic(() => 
-  import("react-window").then(mod => ({ default: mod.FixedSizeList })), 
-  { ssr: false }
-)
-
-const AutoSizer = dynamic(() => import("react-virtualized-auto-sizer"), {
+const AutoSizer = dynamic(() => 
+  import("react-virtualized-auto-sizer").then(mod => ({ default: mod.default })), {
   ssr: false,
   loading: () => <div className="w-full h-full bg-muted animate-pulse rounded" />
 })
@@ -118,7 +101,7 @@ class DataSampler {
     if (data.length <= targetCount) return data;
     
     const step = data.length / targetCount;
-    const result = [];
+    const result: typeof data = [];
     
     for (let i = 0; i < targetCount; i++) {
       const index = Math.floor(i * step);
@@ -156,7 +139,7 @@ class DataSampler {
     if (data.length <= targetCount) return data;
     
     const windows = this.createSlidingWindows(data, Math.ceil(data.length / targetCount));
-    const result = [];
+    const result: typeof data = [];
     
     windows.forEach(window => {
       // Find the most representative point in each window
@@ -230,7 +213,7 @@ class ProgressiveDataLoader {
         ? laps.filter(l => l.lap_number >= startLap && l.lap_number <= endLap)
             .map(l => ({
               lap: l.lap_number || 0,
-              time: l.lap_time || l.lap_duration || 0,
+              time: l.lap_time || 0,
             }))
         : [];
 
@@ -342,7 +325,7 @@ function LapTimeComparisonChart({
     setLoading(true);
     setError(null);
     
-    const openf1 = new OpenF1Service("https://api.openf1.org/v1");
+    const openf1 = new OpenF1Service();
     
     try {
       const seriesPromises = driverNumbers.map(async (driverNumber) => {
@@ -356,12 +339,13 @@ function LapTimeComparisonChart({
                   lapRangeFilter.max, 
                   openf1
                 )
-              : openf1.getLapTimes(sessionKey, driverNumber).then(laps => 
-                  Array.isArray(laps) ? laps.map(l => ({
+              : (async () => {
+                  const lapData = await openf1.getLapTimes(sessionKey, driverNumber);
+                  return Array.isArray(lapData) ? lapData.map(l => ({
                     lap: l.lap_number || 0,
-                    time: l.lap_time || l.lap_duration || 0,
-                  })) : []
-                ),
+                    time: l.lap_time || 0,
+                  })) : [];
+                })(),
             openf1.getDriverInfo(sessionKey, driverNumber),
           ]);
 
@@ -440,6 +424,8 @@ function LapTimeComparisonChart({
 
   // Apply virtualization to series data
   useEffect(() => {
+    if (series.length === 0) return;
+
     const virtualizedSeries = series.map(s => {
       const virtualizedData = virtualizeSeriesData(s.originalData, virtualizationOptions, viewport);
       return {
@@ -457,8 +443,14 @@ function LapTimeComparisonChart({
       compressionRatio
     }));
 
-    setSeries(virtualizedSeries);
-  }, [series.length, virtualizationOptions, virtualizeSeriesData, viewport.totalDataPoints]);
+    // Only update if the data actually changed
+    setSeries(prev => {
+      const hasChanged = prev.length !== virtualizedSeries.length || 
+        prev.some((s, i) => s.virtualizedData.length !== virtualizedSeries[i].virtualizedData.length);
+      
+      return hasChanged ? virtualizedSeries : prev;
+    });
+  }, [virtualizationOptions, lapRangeFilter, timeFilter]); // Remove circular dependencies
 
   // Fetch data when dependencies change
   useEffect(() => {
@@ -544,40 +536,43 @@ function LapTimeComparisonChart({
   }, [series, chartData, sessionKey, activeDrivers]);
 
   // Virtualized row renderer for data table
-  const VirtualizedRow = useCallback(({ index, style }: { index: number; style: any }) => {
-    const lap = chartData[index];
-    const visibleSeries = series.filter(s => s.isVisible && activeDrivers.includes(s.driverNumber));
-    
-    return (
-      <div 
-        className={`flex items-center px-2 py-1 ${
-          index % 2 === 0 ? 'bg-muted/30' : ''
-        }`}
-        style={style}
-      >
-        <div className="w-16 font-medium">
-          <Badge variant={highlightedLap === lap.lap ? "default" : "secondary"}>
-            Lap {lap.lap}
-          </Badge>
-        </div>
-        {visibleSeries.map((s) => (
-          <div 
-            key={s.name} 
-            className="flex-1 text-sm text-right px-2"
-            style={{ color: s.color }}
-          >
-            {lap[s.name] && lap[s.name] > 0 ? (
-              <span className="font-mono">
-                {lap[s.name].toFixed(3)}s
-              </span>
-            ) : (
-              <span className="text-muted-foreground">-</span>
-            )}
+  const VirtualizedRow = useCallback(
+    ({ index, style }: { index: number; style: any }) => {
+      const lap = chartData[index];
+      const visibleSeries = series.filter(s => s.isVisible && activeDrivers.includes(s.driverNumber));
+      
+      return (
+        <div 
+          className={`flex items-center px-2 py-1 ${
+            index % 2 === 0 ? 'bg-muted/30' : ''
+          }`}
+          style={style}
+        >
+          <div className="w-16 font-medium">
+            <Badge variant={highlightedLap === lap.lap ? "default" : "secondary"}>
+              Lap {lap.lap}
+            </Badge>
           </div>
-        ))}
-      </div>
-    );
-  }, [chartData, series, activeDrivers, highlightedLap]);
+          {visibleSeries.map((s) => (
+            <div 
+              key={s.name} 
+              className="flex-1 text-sm text-right px-2"
+              style={{ color: s.color }}
+            >
+              {lap[s.name] && lap[s.name] > 0 ? (
+                <span className="font-mono">
+                  {lap[s.name].toFixed(3)}s
+                </span>
+              ) : (
+                <span className="text-muted-foreground">-</span>
+              )}
+            </div>
+          ))}
+        </div>
+      );
+    },
+    [chartData, series, activeDrivers, highlightedLap]
+  );
 
   return (
     <Card 

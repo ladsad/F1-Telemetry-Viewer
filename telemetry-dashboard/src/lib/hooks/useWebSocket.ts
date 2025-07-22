@@ -184,41 +184,6 @@ export function useWebSocket<T = any>(
     options.onError?.(error);
   }, [options]);
 
-  // Connect function
-  const connect = useCallback(() => {
-    if (!url) {
-      setError("No WebSocket URL provided");
-      return;
-    }
-
-    if (wsRef.current) {
-      wsRef.current.close();
-    }
-
-    // Clear any existing unsubscribers
-    unsubscribersRef.current.forEach(unsub => unsub());
-    unsubscribersRef.current = [];
-
-    try {
-      wsRef.current = new OpenF1WebSocket(url, {
-        batchSize: 10,
-        intervalMs: 50,
-        maxQueueSize: connectionConfig.maxReconnectAttempts * 10,
-      });
-
-      // Set up event handlers and store unsubscribe functions
-      const unsubStatus = wsRef.current.onStatusChange(handleStatusChange);
-      const unsubMessage = wsRef.current.onMessage(handleMessage);
-
-      // Store unsubscribe functions in our ref
-      unsubscribersRef.current = [unsubStatus, unsubMessage];
-      
-    } catch (err) {
-      const error = err instanceof Error ? err : new Error('Failed to create WebSocket connection');
-      handleError(error);
-    }
-  }, [url, connectionConfig, handleStatusChange, handleMessage, handleError]);
-
   // Disconnect function
   const disconnect = useCallback(() => {
     // Call unsubscribe functions
@@ -243,10 +208,91 @@ export function useWebSocket<T = any>(
     setError(null);
   }, []);
 
-  // Reconnect function
+  // Connect function with enhanced error handling
+  const connect = useCallback(() => {
+    if (!url) {
+      setError("No WebSocket URL provided");
+      return;
+    }
+
+    // Don't attempt connection if already connected or connecting
+    if (status === "open" || status === "connecting") {
+      return;
+    }
+
+    if (wsRef.current) {
+      wsRef.current.close();
+    }
+
+    // Clear any existing unsubscribers
+    unsubscribersRef.current.forEach(unsub => unsub());
+    unsubscribersRef.current = [];
+
+    try {
+      wsRef.current = new OpenF1WebSocket(url, {
+        batchSize: 10,
+        intervalMs: 50,
+        maxQueueSize: connectionConfig.maxReconnectAttempts * 10,
+      });
+
+      // Set up event handlers and store unsubscribe functions
+      const unsubStatus = wsRef.current.onStatusChange(handleStatusChange);
+      const unsubMessage = wsRef.current.onMessage(handleMessage);
+
+      // Store unsubscribe functions in our ref
+      unsubscribersRef.current = [unsubStatus, unsubMessage];
+
+      // Set up error recovery - if connection fails after timeout, try again
+      const connectionTimeout = setTimeout(() => {
+        if (wsRef.current?.status === "connecting") {
+          console.warn('WebSocket connection timeout, retrying...');
+          // Call reconnect logic directly here instead of using reconnect()
+          setError(null);
+          disconnect();
+          setTimeout(() => {
+            connectionStatsRef.current.reconnectAttempts = 0;
+            connect();
+          }, 200);
+        }
+      }, 10000); // 10 second timeout
+
+      // Clear timeout when connection succeeds or component unmounts
+      unsubscribersRef.current.push(() => clearTimeout(connectionTimeout));
+
+    } catch (err) {
+      const error = err instanceof Error ? err : new Error('Failed to create WebSocket connection');
+      console.error('WebSocket connection error:', error);
+      handleError(error);
+      
+      // Attempt reconnection after error if auto-reconnect is enabled
+      if (connectionConfig.enableAutoReconnect && connectionStatsRef.current.reconnectAttempts < connectionConfig.maxReconnectAttempts) {
+        setTimeout(() => {
+          // Inline reconnect logic to avoid circular dependency
+          setError(null);
+          disconnect();
+          setTimeout(() => {
+            connectionStatsRef.current.reconnectAttempts = 0;
+            connect();
+          }, 200);
+        }, connectionConfig.reconnectInterval);
+      }
+    }
+  }, [url, connectionConfig, handleStatusChange, handleMessage, handleError, status, disconnect]);
+
+  // Reconnect function with improved error handling
   const reconnect = useCallback(() => {
+    // Clear any existing error state
+    setError(null);
+    
+    // Disconnect cleanly first
     disconnect();
-    setTimeout(() => connect(), 100); // Small delay to ensure cleanup
+    
+    // Add small delay to ensure cleanup, then reconnect
+    setTimeout(() => {
+      // Reset connection stats for new attempt
+      connectionStatsRef.current.reconnectAttempts = 0;
+      connect();
+    }, 200);
   }, [disconnect, connect]);
 
   // Send function
@@ -265,10 +311,20 @@ export function useWebSocket<T = any>(
     }
   }, [handleError]);
 
-  // Main effect for connection management
+  // Main effect for connection management with better error recovery
   useEffect(() => {
     if (!url) {
       setError("No WebSocket URL provided");
+      setStatus("closed");
+      return;
+    }
+
+    // Validate URL format before attempting connection
+    try {
+      new URL(url);
+    } catch (urlError) {
+      setError(`Invalid WebSocket URL: ${url}`);
+      setStatus("error");
       return;
     }
 
@@ -310,6 +366,24 @@ export function useWebSocket<T = any>(
     droppedCount: queueStatsRef.current.droppedCount,
   }), [telemetryQueue.queueLength]);
 
+  // Add connection health monitoring
+  useEffect(() => {
+    if (!wsRef.current || !connectionConfig.enableAutoReconnect) return;
+
+    const healthCheckInterval = setInterval(() => {
+      // If we haven't received data in a while and should be connected, reconnect
+      const timeSinceLastData = Date.now() - (connectionStatsRef.current.lastConnectedAt || 0);
+      const healthTimeout = 60000; // 1 minute without data is unhealthy
+
+      if (status === 'open' && timeSinceLastData > healthTimeout) {
+        console.warn('WebSocket connection appears stale, reconnecting...');
+        reconnect();
+      }
+    }, 30000); // Check every 30 seconds
+
+    return () => clearInterval(healthCheckInterval);
+  }, [status, reconnect, connectionConfig.enableAutoReconnect]);
+
   return {
     // Data and state
     data: telemetryQueue.data,
@@ -332,48 +406,93 @@ export function useWebSocket<T = any>(
 
 // Utility function to create WebSocket URLs for OpenF1
 export function createOpenF1WebSocketUrl(endpoint: string, params?: Record<string, string>): string {
-  const baseUrl = "wss://api.openf1.org/v1";
-  const url = new URL(endpoint, baseUrl);
+  // Read from environment variables with fallback
+  const baseUrl = process.env.NEXT_PUBLIC_OPENF1_WS_URL || "wss://api.openf1.org/v1";
   
-  if (params) {
-    Object.entries(params).forEach(([key, value]) => {
-      url.searchParams.set(key, value);
-    });
+  // Ensure baseUrl doesn't end with slash for consistent URL building
+  const cleanBaseUrl = baseUrl.endsWith('/') ? baseUrl.slice(0, -1) : baseUrl;
+  
+  try {
+    const url = new URL(endpoint, cleanBaseUrl);
+    
+    if (params) {
+      Object.entries(params).forEach(([key, value]) => {
+        url.searchParams.set(key, value);
+      });
+    }
+    
+    return url.toString();
+  } catch (error) {
+    console.error('Failed to create WebSocket URL:', error);
+    // Fallback to manual URL construction
+    const queryString = params ? '?' + new URLSearchParams(params).toString() : '';
+    return `${cleanBaseUrl}${endpoint}${queryString}`;
   }
-  
-  return url.toString();
 }
 
 // Hook for specific OpenF1 telemetry data
 export function useOpenF1Telemetry(sessionKey: string | null, driverNumber?: number) {
-  const url = sessionKey 
-    ? createOpenF1WebSocketUrl('/live_timing', {
+  // Only create URL if we have a valid session key
+  const url = useMemo(() => {
+    if (!sessionKey || sessionKey === 'null' || sessionKey === 'undefined') {
+      return null;
+    }
+    
+    try {
+      return createOpenF1WebSocketUrl('/live_timing', {
         session_key: sessionKey,
         ...(driverNumber && { driver_number: driverNumber.toString() })
-      })
-    : null;
+      });
+    } catch (error) {
+      console.error('Failed to create telemetry WebSocket URL:', error);
+      return null;
+    }
+  }, [sessionKey, driverNumber]);
 
   return useWebSocket(url, {
     parseOptions: {
       enableParsing: true,
       validator: (data) => {
-        return data && typeof data === 'object' && 'timestamp' in data;
+        // More robust validation for OpenF1 data
+        if (!data || typeof data !== 'object') return false;
+        
+        // Check for required fields based on OpenF1 API structure
+        const hasTimestamp = 'timestamp' in data || 'date' in data;
+        const hasDriverData = 'driver_number' in data || 'session_key' in data;
+        
+        return hasTimestamp && hasDriverData;
       },
       transformer: (data) => {
         // Transform OpenF1 data structure to match our internal format
+        const timestamp = data.timestamp || data.date;
+        
         return {
           ...data,
-          timestamp: new Date(data.timestamp || data.date).getTime(),
+          timestamp: timestamp ? new Date(timestamp).getTime() : Date.now(),
+          // Normalize field names from OpenF1 to our internal format
+          gear: data.gear || data.n_gear || 0,
+          drs: Boolean(data.drs === 1 || data.drs === true || data.drs === 'true'),
         };
       }
     },
     queueOptions: {
-      throttleMs: 50,
+      throttleMs: 100, // Slightly higher for stability
+      debounceMs: 50,  // Lower debounce for more responsive updates
       processStrategy: 'smooth',
     },
     connectionOptions: {
       enableAutoReconnect: true,
-      maxReconnectAttempts: 15,
+      maxReconnectAttempts: 20, // Increased for better reliability
+      reconnectInterval: 2000,  // Slower initial reconnect
+      pingInterval: 25000,      // Regular ping to keep connection alive
+    },
+    onError: (error) => {
+      console.error('OpenF1 Telemetry WebSocket error:', error);
+    },
+    onStatusChange: (status) => {
+      if (process.env.NODE_ENV === 'development') {
+        console.log(`OpenF1 Telemetry connection status: ${status}`);
+      }
     }
   });
 }
@@ -384,11 +503,13 @@ export function useLiveTelemetryStream(sessionKey: string | null) {
   const [sessionInfo, setSessionInfo] = useState<any>(null)
   const [lastUpdate, setLastUpdate] = useState<Date>(new Date())
 
-  const { data, connectionState, error, reconnect, disconnect } = useOpenF1Telemetry(sessionKey)
+  const { data, status, error, reconnect, disconnect } = useOpenF1Telemetry(sessionKey)
 
-  // Process incoming telemetry data
+  // Process incoming telemetry data with error handling
   useEffect(() => {
-    if (data) {
+    if (!data) return;
+
+    try {
       const now = new Date()
       
       if (Array.isArray(data)) {
@@ -397,10 +518,20 @@ export function useLiveTelemetryStream(sessionKey: string | null) {
           const updatedDrivers = [...prevDrivers]
           
           data.forEach(driverData => {
+            // Validate driver data structure
+            if (!driverData || typeof driverData !== 'object' || !driverData.driver_number) {
+              console.warn('Invalid driver data received:', driverData);
+              return;
+            }
+
             const existingIndex = updatedDrivers.findIndex(d => d.driver_number === driverData.driver_number)
             
             if (existingIndex >= 0) {
-              updatedDrivers[existingIndex] = { ...updatedDrivers[existingIndex], ...driverData, timestamp: now.getTime() }
+              updatedDrivers[existingIndex] = { 
+                ...updatedDrivers[existingIndex], 
+                ...driverData, 
+                timestamp: now.getTime() 
+              }
             } else {
               updatedDrivers.push({ ...driverData, timestamp: now.getTime() })
             }
@@ -415,16 +546,24 @@ export function useLiveTelemetryStream(sessionKey: string | null) {
           const existingIndex = updatedDrivers.findIndex(d => d.driver_number === data.driver_number)
           
           if (existingIndex >= 0) {
-            updatedDrivers[existingIndex] = { ...updatedDrivers[existingIndex], ...data, timestamp: now.getTime() }
+            updatedDrivers[existingIndex] = { 
+              ...updatedDrivers[existingIndex], 
+              ...data, 
+              timestamp: now.getTime() 
+            }
           } else {
             updatedDrivers.push({ ...data, timestamp: now.getTime() })
           }
           
           return updatedDrivers
         })
+      } else {
+        console.warn('Received data without driver_number:', data);
       }
       
       setLastUpdate(now)
+    } catch (processingError) {
+      console.error('Error processing telemetry data:', processingError);
     }
   }, [data])
 
@@ -432,10 +571,12 @@ export function useLiveTelemetryStream(sessionKey: string | null) {
     drivers,
     sessionInfo,
     lastUpdate,
-    connectionState,
+    connectionState: status, // Fix: use 'status' instead of 'connectionState'
     error,
     reconnect,
     disconnect,
-    isLive: connectionState === 'open'
+    isLive: status === 'open', // Fix: use 'status' instead of 'connectionState'
+    // Add health check function
+    isHealthy: status === 'open' && drivers.length > 0 // Fix: use 'status' instead of 'connectionState'
   }
 }

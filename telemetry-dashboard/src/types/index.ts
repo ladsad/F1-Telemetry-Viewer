@@ -309,11 +309,14 @@ export interface TelemetryHistoryGridProps {
 /**
  * Props for ConnectionStatusIndicator component
  */
-export interface ConnectionStatusIndicatorProps {
-  service?: 'all' | 'telemetry' | 'positions' | 'timing' | 'weather';
-  showLabel?: boolean;
-  size?: 'sm' | 'md' | 'lg';
-  position?: 'inline' | 'floating';
+export type ConnectionStatusIndicatorProps = {
+  service?: 'all' | 'telemetry' | 'positions' | 'timing' | 'weather'
+  showLabel?: boolean
+  size?: 'sm' | 'md' | 'lg' | 'xl'
+  position?: 'inline' | 'floating'
+  showSignalStrength?: boolean
+  pulseAnimation?: boolean
+  compactMode?: boolean
 }
 
 /**

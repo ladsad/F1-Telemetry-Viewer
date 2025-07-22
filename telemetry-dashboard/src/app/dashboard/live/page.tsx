@@ -54,6 +54,13 @@ import type {
 
 // Real-time driver data interface
 interface LiveDriverData extends OpenF1CarData {
+  // Required from OpenF1CarData
+  session_key: string
+  lap_number: number
+  driver_number: number
+  date: string
+  
+  // Additional live data fields
   position?: number
   gap_to_leader?: number
   tire_compound?: string
@@ -97,12 +104,12 @@ function useLiveSessionData(sessionKey: string) {
 
   const [isLoading, setIsLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
-  const intervalRef = useRef<NodeJS.Timeout>()
+  const intervalRef = useRef<NodeJS.Timeout | null>(null)
 
   // WebSocket connection for real-time telemetry
   const { 
     data: telemetryData, 
-    connectionState, 
+    status: connectionState, 
     reconnect,
     disconnect 
   } = useOpenF1Telemetry(sessionKey)
@@ -116,7 +123,7 @@ function useLiveSessionData(sessionKey: string) {
       const openf1 = new OpenF1Service(); // No longer needs explicit URL parameter
       
       // Fetch session details
-      const [session, weather, drivers] = await Promise.all([
+      const [sessionData, weather, drivers] = await Promise.all([
         openf1.getSessionDetails(sessionKey),
         openf1.getWeather(sessionKey),
         openf1.getDriverInfo(sessionKey)
@@ -135,7 +142,9 @@ function useLiveSessionData(sessionKey: string) {
               : null
 
             return {
-              ...latestData,
+              // Include all required fields from OpenF1CarData and LiveDriverData
+              session_key: sessionKey,
+              lap_number: latestData?.lap_number || 1,
               driver_number: driver.driver_number,
               driver_name: driver.broadcast_name || driver.full_name,
               team_name: driver.team_name,
@@ -147,10 +156,18 @@ function useLiveSessionData(sessionKey: string) {
               gear: latestData?.gear || 0,
               rpm: latestData?.rpm || 0,
               drs: latestData?.drs || false,
-              timestamp: latestData?.timestamp || Date.now()
+              timestamp: latestData?.timestamp || Date.now(),
+              date: (latestData && 'date' in latestData ? latestData.date : new Date().toISOString()),
+              gap_to_leader: 0, // 'gap_to_leader' not available in position object
+              tire_compound: 'Unknown',
+              tire_age: 0,
+              pit_status: 'None'
             } as LiveDriverData
-          } catch {
+          } catch (error) {
+            console.warn(`Failed to fetch data for driver ${driver.driver_number}:`, error)
             return {
+              session_key: sessionKey,
+              lap_number: 1,
               driver_number: driver.driver_number,
               driver_name: driver.broadcast_name || driver.full_name,
               team_name: driver.team_name,
@@ -162,7 +179,12 @@ function useLiveSessionData(sessionKey: string) {
               gear: 0,
               rpm: 0,
               drs: false,
-              timestamp: Date.now()
+              timestamp: Date.now(),
+              date: new Date().toISOString(),
+              gap_to_leader: 0,
+              tire_compound: 'Unknown',
+              tire_age: 0,
+              pit_status: 'None'
             } as LiveDriverData
           }
         })
@@ -170,12 +192,12 @@ function useLiveSessionData(sessionKey: string) {
 
       setSessionState({
         sessionKey,
-        isLive: session?.session_type?.includes('Race') || false,
+        isLive: sessionData?.session_type?.includes('Race') || false,
         currentLap: 1,
-        totalLaps: session?.session_type?.includes('Race') ? 50 : 0,
+        totalLaps: sessionData?.session_type?.includes('Race') ? 50 : 0,
         sessionTime: 0,
-        sessionType: session?.session_type || 'Practice',
-        trackName: session?.circuit_short_name || session?.circuit_name || 'Unknown Circuit',
+        sessionType: sessionData?.session_type || 'Practice',
+        trackName: sessionData?.circuit_short_name || sessionData?.circuit_name || 'Unknown Circuit',
         weather: Array.isArray(weather) && weather.length > 0 ? weather[weather.length - 1] : null,
         drivers: initialDriverData.sort((a, b) => (a.position || 999) - (b.position || 999)),
         selectedDrivers: initialDriverData.slice(0, 6).map(d => d.driver_number),
@@ -218,7 +240,11 @@ function useLiveSessionData(sessionKey: string) {
                 ...driver,
                 ...wsData,
                 position: position?.position || driver.position,
-                timestamp: Date.now()
+                timestamp: Date.now(),
+                // Ensure required fields are preserved
+                session_key: driver.session_key,
+                lap_number: wsData.lap_number || driver.lap_number,
+                date: wsData.date || driver.date
               }
             }
 
@@ -771,7 +797,6 @@ function LiveDashboardContent() {
               <ConnectionStatusIndicator 
                 service="all"
                 size="sm"
-                showSignalStrength={true}
               />
               
               <AnimatedButton

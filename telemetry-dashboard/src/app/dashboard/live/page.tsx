@@ -1,6 +1,6 @@
 "use client"
 
-import { useState, useEffect, Suspense } from "react"
+import { useState, useEffect, Suspense, useCallback, useMemo, useRef } from "react"
 import dynamic from "next/dynamic"
 import { useInView } from "react-intersection-observer"
 import Sidebar from "@/components/layout/Sidebar"
@@ -12,10 +12,31 @@ import LoadingSpinner from "@/components/ui/LoadingSpinner"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
-import { RefreshCw, Zap, Activity, Radio, AlertCircle } from "lucide-react"
+import AnimatedButton from "@/components/AnimatedButton"
+import { 
+  RefreshCw, 
+  Zap, 
+  Activity, 
+  Radio, 
+  AlertCircle, 
+  Eye,
+  EyeOff,
+  Users,
+  TrendingUp,
+  Clock,
+  MapPin,
+  Gauge,
+  ChevronUp,
+  ChevronDown,
+  BarChart3,
+  Signal,
+  Play,
+  Pause,
+  Square
+} from "lucide-react"
 import { motion, AnimatePresence } from "framer-motion"
 
-// Dynamically import heavy components
+// Enhanced dynamic imports with real-time optimizations
 const TelemetryDisplay = dynamic(() => import("@/components/TelemetryDisplay"), {
   loading: () => <LiveTelemetryDisplaySkeleton />,
   ssr: false
@@ -36,7 +57,7 @@ const WeatherOverlay = dynamic(() => import("@/components/WeatherOverlay"), {
   ssr: false
 })
 
-// Live-specific components - only load when expanded
+// Live-specific components
 const TelemetryTable = dynamic(() => import("@/components/TelemetryTable"), {
   loading: () => <LiveTableSkeleton />,
   ssr: false
@@ -47,7 +68,23 @@ const LapTimeComparisonChart = dynamic(() => import("@/components/LapTimeCompari
   ssr: false
 })
 
-// Enhanced live-specific loading skeletons with real-time indicators
+// Live position tracking component
+const LivePositionTracker = dynamic(() => import("@/components/LivePositionTracker").catch(() => ({
+  default: () => <LivePositionTrackerSkeleton />
+})), {
+  loading: () => <LivePositionTrackerSkeleton />,
+  ssr: false
+})
+
+// Real-time statistics dashboard
+const LiveStatsOverview = dynamic(() => import("@/components/LiveStatsOverview").catch(() => ({
+  default: () => <LiveStatsOverviewSkeleton />
+})), {
+  loading: () => <LiveStatsOverviewSkeleton />,
+  ssr: false
+})
+
+// Enhanced Loading Skeletons with Real-time Indicators
 function LiveTelemetryDisplaySkeleton() {
   return (
     <Card className="relative overflow-hidden">
@@ -81,7 +118,6 @@ function LiveTelemetryDisplaySkeleton() {
               </motion.div>
             ))}
           </div>
-          {/* Animated data flow indicator */}
           <div className="mt-4 flex items-center justify-center space-x-2 text-sm text-muted-foreground">
             <div className="flex space-x-1">
               {[0, 1, 2].map((i) => (
@@ -125,7 +161,6 @@ function LiveTrackMapSkeleton() {
       </CardHeader>
       <CardContent>
         <div className="aspect-video bg-gradient-to-br from-muted/30 via-muted/50 to-muted/30 rounded-lg animate-pulse flex items-center justify-center relative overflow-hidden">
-          {/* Animated racing line */}
           <motion.div
             className="absolute inset-4 border-2 border-dashed border-primary/20 rounded-full"
             animate={{ rotate: 360 }}
@@ -233,13 +268,11 @@ function LiveTableSkeleton() {
       </CardHeader>
       <CardContent>
         <div className="space-y-2">
-          {/* Header row */}
           <div className="grid grid-cols-6 gap-4 pb-2 border-b">
             {Array.from({ length: 6 }).map((_, i) => (
               <div key={i} className="h-4 bg-muted rounded animate-pulse" />
             ))}
           </div>
-          {/* Data rows with staggered animation */}
           {Array.from({ length: 8 }).map((_, i) => (
             <motion.div 
               key={i} 
@@ -276,7 +309,6 @@ function LiveChartSkeleton({ title }: { title: string }) {
       </CardHeader>
       <CardContent>
         <div className="h-64 bg-gradient-to-r from-muted/30 via-muted/50 to-muted/30 rounded-lg animate-pulse flex items-center justify-center relative overflow-hidden">
-          {/* Animated chart lines */}
           <div className="absolute inset-0">
             {[0, 1, 2].map((i) => (
               <motion.div
@@ -310,6 +342,76 @@ function LiveChartSkeleton({ title }: { title: string }) {
         </div>
       </CardContent>
     </Card>
+  )
+}
+
+// New skeleton components for live features
+function LivePositionTrackerSkeleton() {
+  return (
+    <Card>
+      <CardHeader>
+        <CardTitle className="flex items-center gap-2">
+          <MapPin className="w-5 h-5 animate-pulse" />
+          <span>Live Positions</span>
+        </CardTitle>
+      </CardHeader>
+      <CardContent>
+        <div className="space-y-3">
+          {Array.from({ length: 20 }).map((_, i) => (
+            <motion.div
+              key={i}
+              className="flex items-center justify-between py-2 px-3 bg-muted/30 rounded"
+              initial={{ opacity: 0, x: -20 }}
+              animate={{ opacity: 1, x: 0 }}
+              transition={{ delay: i * 0.02 }}
+            >
+              <div className="flex items-center gap-3">
+                <div className="w-8 h-8 bg-gradient-to-r from-primary/20 to-primary/40 rounded-full animate-pulse flex items-center justify-center">
+                  <span className="text-xs font-bold">{i + 1}</span>
+                </div>
+                <div className="space-y-1">
+                  <div className="h-4 w-20 bg-muted rounded animate-pulse" />
+                  <div className="h-3 w-16 bg-muted/60 rounded animate-pulse" />
+                </div>
+              </div>
+              <div className="text-right space-y-1">
+                <div className="h-4 w-12 bg-muted rounded animate-pulse" />
+                <div className="h-3 w-8 bg-muted/60 rounded animate-pulse" />
+              </div>
+            </motion.div>
+          ))}
+        </div>
+      </CardContent>
+    </Card>
+  )
+}
+
+function LiveStatsOverviewSkeleton() {
+  return (
+    <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+      {{
+        label: "Fastest Lap", icon: Clock },
+        { label: "Top Speed", icon: Gauge },
+        { label: "Leaders", icon: TrendingUp },
+        { label: "Active Cars", icon: Users }
+      ].map((stat, i) => {
+        const IconComponent = stat.icon
+        return (
+          <Card key={i} className="p-4 animate-pulse">
+            <div className="flex items-center gap-3 mb-2">
+              <div className="w-10 h-10 rounded-full bg-muted flex items-center justify-center">
+                <IconComponent className="w-6 h-6 text-muted-foreground" />
+              </div>
+              <div className="flex-1 space-y-1">
+                <div className="h-4 bg-muted rounded" />
+                <div className="h-3 bg-muted/60 rounded" />
+              </div>
+            </div>
+            <div className="h-6 bg-muted rounded" />
+          </Card>
+        )
+      })}
+    </div>
   )
 }
 
